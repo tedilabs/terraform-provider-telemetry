@@ -25,11 +25,13 @@ check "telemetry" {
     condition = var.telemetry_enabled ? provider::telemetry::capture_posthog(
       var.posthog_connection,
       {
-        machine        = true
-        network        = false
-        git            = false
-        github         = false
-        github_actions = false
+        machine               = true
+        network               = false
+        git                   = false
+        github                = false
+        github_actions        = false
+        deduplication_enabled = true
+        deduplication_keys    = ["extra_data.module", "extra_data.workspace"]
       },
       {
         workspace = terraform.workspace

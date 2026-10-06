@@ -28,7 +28,12 @@ def main():
         def log_message(self, *_):
             pass
 
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    class Server(http.server.ThreadingHTTPServer):
+        # Terraform can evaluate many checks concurrently. Avoid dropping local
+        # test connections at the server's default small listen backlog.
+        request_queue_size = 512
+
+    server = Server(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -110,6 +115,82 @@ check "capture" {
             before = len(events)
             terraform("plan", "-input=false")
             assert len(events) > before, "options.cache_enabled=false did not capture"
+            # Real module instances verify cross-function sharing and list decoding.
+            Handler.status = 200
+            module_dir = work / "module"
+            module_dir.mkdir()
+            header = source.read_text().split('check "capture"')[0]
+            (module_dir / "main.tf").write_text(header + '''
+variable "module_name" { type = string }
+variable "instance_id" { type = string }
+variable "deduplication_enabled" { type = bool }
+variable "deduplication_keys" { type = list(string) }
+check "capture" {
+  assert {
+    condition = provider::telemetry::capture_posthog(
+      var.connection,
+      {
+        machine = true
+        network = false
+        git = false
+        github = false
+        github_actions = false
+        deduplication_enabled = var.deduplication_enabled
+        deduplication_keys = var.deduplication_keys
+      },
+      { module = var.module_name, instance = var.instance_id, workspace = terraform.workspace }
+    )
+    error_message = "Telemetry must never fail."
+  }
+}
+''')
+            source.write_text(header + '''
+variable "deduplication_enabled" {
+  type = bool
+  default = true
+}
+variable "deduplication_keys" {
+  type = list(string)
+  default = ["extra_data.module", "extra_data.workspace"]
+}
+module "counted" {
+  source = "./module"
+  count = 100
+  connection = var.connection
+  module_name = "counted"
+  instance_id = tostring(count.index)
+  deduplication_enabled = var.deduplication_enabled
+  deduplication_keys = var.deduplication_keys
+}
+module "each" {
+  source = "./module"
+  for_each = toset([for i in range(100) : tostring(i)])
+  connection = var.connection
+  module_name = "each"
+  instance_id = each.key
+  deduplication_enabled = var.deduplication_enabled
+  deduplication_keys = var.deduplication_keys
+}
+''')
+            terraform("get")
+            before = len(events)
+            terraform("plan", "-input=false", "-out=modules.tfplan")
+            assert len(events) - before == 2, f"expected two module events, got {len(events) - before}"
+            assert {e["properties"]["extra_data"]["module"] for e in events[before:]} == {"counted", "each"}
+            before = len(events)
+            result = subprocess.run(["terraform", "apply", "-input=false", "-no-color", "modules.tfplan"], cwd=work, env=env, text=True, capture_output=True)
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert len(events) - before == 2, "saved-plan apply did not get a fresh deduplication scope"
+            env["TF_VAR_deduplication_enabled"] = "false"
+            before = len(events)
+            terraform("plan", "-input=false")
+            assert len(events) - before == 200, f"disabled deduplication sent {len(events) - before} events"
+            env["TF_VAR_deduplication_enabled"] = "true"
+            env["TF_VAR_deduplication_keys"] = json.dumps(["extra_data.module", "extra_data.instance"])
+            before = len(events)
+            terraform("plan", "-input=false")
+            assert len(events) - before == 200, "instance keys did not preserve distinct instances"
+            print("PASS: count=100 + for_each=100 -> 2 events per plan/saved apply; disabled deduplication or instance keys -> 200 events")
             print(f"PASS: plan ({plan_count} captures), saved-plan apply ({apply_count} captures), no-change apply with HTTP 500, typed extra_data, working-directory Git metadata, optional options.cache_enabled=false, empty resource state")
     finally:
         server.shutdown()

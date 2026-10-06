@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -55,8 +56,17 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	properties, ok := collectProperties(ctx, options, extra)
+	properties, opts, ok := collectProperties(ctx, options, extra)
 	if !ok {
+		return
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	if opts.deduplicationEnabled && !processDeduplicator.Allow(
+		[]string{"capture_posthog", strings.TrimRight(conn.Host, "/"), conn.ProjectToken},
+		properties, opts.deduplicationKeys,
+	) {
 		return
 	}
 	telemetry.CapturePostHog(ctx, conn, properties)

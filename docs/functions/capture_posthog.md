@@ -6,7 +6,7 @@ description: |-
 
 # function: capture_posthog
 
-Sends a `terraform_capture` event to PostHog. Every function invocation returns `true`; this does not indicate delivery success. The function deliberately performs network side effects and does not guarantee exactly-once execution.
+Attempts to send a non-duplicate `terraform_capture` event to PostHog. Every function invocation returns `true`; this does not indicate delivery success. The function deliberately performs network side effects and does not guarantee exactly-once execution.
 
 ## Signature
 
@@ -14,12 +14,12 @@ Sends a `terraform_capture` event to PostHog. Every function invocation returns 
 capture_posthog(connection object, options object, extra_data dynamic) bool
 ```
 
-All three arguments are positional and required. The optional `options.cache_enabled` attribute defaults to `true`.
+All three arguments are positional and required. Optional `options.cache_enabled` and `options.deduplication_enabled` default to `true`.
 
 ## Arguments
 
 1. `connection`: `{ host = string, project_token = string }`. Use an ingestion base URL such as `https://us.i.posthog.com`. The function appends `/i/v0/e/`. Connection configuration is supplied here, not in a `provider` block.
-2. `options`: An object or map with required boolean attributes `machine`, `network`, `git`, `github`, and `github_actions`. Enable only the desired collectors. Optional `cache_enabled` defaults to `true`; set it to `false` to bypass metadata cache reads and writes.
+2. `options`: An object or map with required boolean attributes `machine`, `network`, `git`, `github`, and `github_actions`. Enable only the desired collectors. Optional `cache_enabled` defaults to `true`; set it to `false` to bypass metadata cache reads and writes. Optional `deduplication_enabled` defaults to `true`; set it to `false` to bypass event deduplication. Optional `deduplication_keys` is a list of dot-separated property paths; omission or `[]` compares all event properties.
 3. `extra_data`: An object or map with arbitrary JSON-compatible values. Nested structures, strings, numbers, booleans, and null are preserved under `properties.extra_data`. Pass `{}` when empty.
 
 ## Example
@@ -63,6 +63,23 @@ There is a five-second collection/delivery budget and two-second timeouts for co
 
 The explicitly allowlisted `machine`, `network`, `git`, `github`, and `github_actions` groups are collected lazily once per provider process by default, including unavailable/partial results. Concurrent calls and separate function instances share the cache. Disabled groups are neither collected nor included from cache. Cached metadata is a snapshot and may become stale if the execution environment changes.
 
-`extra_data`, connection information, event IDs, and event delivery are never cached. Every eligible call still attempts an event; this feature does not reduce PostHog event counts. Cache storage is memory-only and separate provider processes do not share it, including when Terraform restarts providers between plan and apply.
+`extra_data`, connection information, event IDs, and event delivery are never cached. Collection caching itself does not suppress events; event deduplication is a separate setting. Cache storage is memory-only and separate provider processes do not share it, including when Terraform restarts providers between plan and apply.
 
 Set `cache_enabled = false` inside `options` to bypass the cache for a call. This does not replace cached values. Omitting `cache_enabled` enables caching; an explicit null, unknown, or non-boolean value skips capture and returns `true`. No fourth argument is accepted.
+
+## Event deduplication
+
+Set these attributes inside `options` to send at most one event per module/version/workspace in one provider process:
+
+```hcl
+deduplication_enabled = true
+deduplication_keys    = ["extra_data.module", "extra_data.version", "extra_data.workspace"]
+```
+
+Pass those values through `extra_data`. Repeated `for_each`/`count` instances then share an identity. To send once per instance instead, also pass and select an instance identifier. The first caller's full properties are sent; this does not aggregate instance counts or preserve differences in unselected fields.
+
+Paths are relative to event properties (`extra_data.module`, `machine.os`), not prefixed with `properties.`. They traverse objects/maps; array indexing and escaping literal dots in keys are not supported. Entire objects/lists can be selected. Key order and duplicate keys do not affect identity, while value types and array order do. Host, project token, and capture destination always separate identities. Generated UUIDs are excluded.
+
+Omitted/empty keys compare all collected properties and `extra_data`. Missing selected paths bypass deduplication for that call without recording it, while explicitly present null values can be compared. Null/unknown/incorrectly typed options and paths with empty segments skip capture and return `true`.
+
+Deduplication atomically records an attempt before sending, including failed attempts, with no retries. It stores only hashes, is shared by concurrent function instances, and resets when the provider process exits. Different plan/apply provider processes can each send an event. `deduplication_enabled = false` neither reads nor writes this state; `cache_enabled = false` only affects metadata collection.

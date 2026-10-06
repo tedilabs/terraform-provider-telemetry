@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/function"
@@ -15,19 +16,27 @@ import (
 
 // Shared for the lifetime of this provider process, across function instances.
 var processCollector = telemetry.NewCollector()
+var processDeduplicator = &telemetry.Deduplicator{}
+
+type captureOptions struct {
+	collect              telemetry.Options
+	cacheEnabled         bool
+	deduplicationEnabled bool
+	deduplicationKeys    []string
+}
 
 // Shared by capture functions for all telemetry destinations.
 func optionsParameter() function.DynamicParameter {
-	// A dynamic object preserves an omitted cache_enabled attribute. ObjectParameter
+	// A dynamic object preserves omitted optional attributes. ObjectParameter
 	// requires every declared attribute and cannot express this default.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		Description: "Object or map with required machine, network, git, github, and github_actions booleans. Optional cache_enabled defaults to true; false bypasses metadata cache reads and writes.",
+		Description: "Object or map with required machine, network, git, github, and github_actions booleans. Optional cache_enabled and deduplication_enabled default to true. deduplication_keys selects dot-separated property paths; an omitted or empty list compares all event properties.",
 	}
 }
 
-func collectionOptions(options types.Dynamic) (telemetry.Options, bool, bool) {
-	opts := telemetry.Options{}
+func collectionOptions(options types.Dynamic) (captureOptions, bool) {
+	opts := captureOptions{cacheEnabled: true, deduplicationEnabled: true}
 	var attributes map[string]attr.Value
 	switch value := options.UnderlyingValue().(type) {
 	case types.Object:
@@ -35,56 +44,85 @@ func collectionOptions(options types.Dynamic) (telemetry.Options, bool, bool) {
 	case types.Map:
 		attributes = value.Elements()
 	default:
-		return opts, false, false
+		return opts, false
 	}
 	for key, target := range map[string]*bool{
-		"machine": &opts.Machine, "network": &opts.Network, "git": &opts.Git,
-		"github": &opts.GitHub, "github_actions": &opts.GitHubActions,
+		"machine": &opts.collect.Machine, "network": &opts.collect.Network, "git": &opts.collect.Git,
+		"github": &opts.collect.GitHub, "github_actions": &opts.collect.GitHubActions,
 	} {
 		value, ok := attributes[key].(types.Bool)
 		if !ok || value.IsNull() || value.IsUnknown() {
-			return opts, false, false
+			return opts, false
 		}
 		*target = value.ValueBool()
 	}
-	cache := true
-	if value, exists := attributes["cache_enabled"]; exists {
-		flag, ok := value.(types.Bool)
-		if !ok || flag.IsNull() || flag.IsUnknown() {
-			return opts, false, false
+	for key, target := range map[string]*bool{
+		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
+	} {
+		if value, exists := attributes[key]; exists {
+			flag, ok := value.(types.Bool)
+			if !ok || flag.IsNull() || flag.IsUnknown() {
+				return opts, false
+			}
+			*target = flag.ValueBool()
 		}
-		cache = flag.ValueBool()
 	}
-	return opts, cache, true
+	if value, exists := attributes["deduplication_keys"]; exists {
+		if value.IsNull() || value.IsUnknown() {
+			return opts, false
+		}
+		var elements []attr.Value
+		switch list := value.(type) {
+		case types.Tuple:
+			elements = list.Elements()
+		case types.List:
+			elements = list.Elements()
+		default:
+			return opts, false
+		}
+		for _, element := range elements {
+			key, ok := element.(types.String)
+			if !ok || key.IsNull() || key.IsUnknown() {
+				return opts, false
+			}
+			for _, part := range strings.Split(key.ValueString(), ".") {
+				if strings.TrimSpace(part) == "" {
+					return opts, false
+				}
+			}
+			opts.deduplicationKeys = append(opts.deduplicationKeys, key.ValueString())
+		}
+	}
+	return opts, true
 }
 
-func collectProperties(ctx context.Context, options types.Dynamic, extra types.Dynamic) (map[string]any, bool) {
+func collectProperties(ctx context.Context, options types.Dynamic, extra types.Dynamic) (map[string]any, captureOptions, bool) {
 	if options.IsNull() || !fullyKnown(ctx, options) || !fullyKnown(ctx, extra) {
-		return nil, false
+		return nil, captureOptions{}, false
 	}
-	opts, cache, ok := collectionOptions(options)
+	opts, ok := collectionOptions(options)
 	if !ok {
-		return nil, false
+		return nil, captureOptions{}, false
 	}
 	extraData := map[string]any{}
 	if !extra.IsNull() && !extra.IsUnderlyingValueNull() {
 		v, err := extra.UnderlyingValue().ToTerraformValue(ctx)
 		if err != nil {
-			return nil, false
+			return nil, captureOptions{}, false
 		}
 		decoded, err := jsonValue(v)
 		if err != nil {
-			return nil, false
+			return nil, captureOptions{}, false
 		}
 		var ok bool
 		extraData, ok = decoded.(map[string]any)
 		if !ok {
-			return nil, false
+			return nil, captureOptions{}, false
 		}
 	}
-	properties := processCollector.Collect(ctx, opts, cache)
+	properties := processCollector.Collect(ctx, opts.collect, opts.cacheEnabled)
 	properties["extra_data"] = extraData
-	return properties, true
+	return properties, opts, true
 }
 
 func fullyKnown(ctx context.Context, value attr.Value) bool {

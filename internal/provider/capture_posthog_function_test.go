@@ -237,7 +237,8 @@ func TestCaptureCacheArgumentsThroughProtocol(t *testing.T) {
 	ctx := context.Background()
 	extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{}))
 	for _, flag := range []attr.Value{nil, types.BoolValue(true), types.BoolValue(false)} {
-		args := []attr.Value{connectionValue("https://example.invalid"), optionsWithCache(disabledOptions(), flag), extra}
+		options := optionsWithCache(disabledOptions(), flag).UnderlyingValue().(types.Object)
+		args := []attr.Value{connectionValue("https://example.invalid"), optionsWithAttributes(options, map[string]attr.Value{"deduplication_enabled": types.BoolValue(false)}), extra}
 		req := &tfprotov6.CallFunctionRequest{Name: "capture_posthog"}
 		for _, arg := range args {
 			value, err := arg.ToTerraformValue(ctx)
@@ -285,9 +286,9 @@ func TestCollectionOptionsValidation(t *testing.T) {
 				"github": types.BoolValue(false), "github_actions": types.BoolValue(false),
 			}), types.BoolValue(false))
 		}
-		opts, cache, ok := collectionOptions(value)
-		if !ok || cache || !opts.Git || opts.Machine || opts.Network || opts.GitHub || opts.GitHubActions {
-			t.Fatalf("invalid parsed options: %+v, cache=%v, ok=%v", opts, cache, ok)
+		opts, ok := collectionOptions(value)
+		if !ok || opts.cacheEnabled || !opts.collect.Git || opts.collect.Machine || opts.collect.Network || opts.collect.GitHub || opts.collect.GitHubActions {
+			t.Fatalf("invalid parsed options: %+v, cache=%v, ok=%v", opts, opts.cacheEnabled, ok)
 		}
 	}
 	for _, value := range []types.Dynamic{
@@ -297,7 +298,7 @@ func TestCollectionOptionsValidation(t *testing.T) {
 		types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{})),
 		types.DynamicValue(types.MapValueMust(types.StringType, map[string]attr.Value{"machine": types.StringValue("true")})),
 	} {
-		if _, _, ok := collectionOptions(value); ok {
+		if _, ok := collectionOptions(value); ok {
 			t.Fatalf("accepted invalid options: %v", value)
 		}
 	}
