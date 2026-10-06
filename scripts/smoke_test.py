@@ -61,7 +61,7 @@ check "capture" {
   assert {
     condition = provider::telemetry::capture_posthog(
       var.connection,
-      { machine = true, network = false, git = true, github = false, github_actions = false },
+      { machine = true, network = false, git = true, github = false, terraform = true, toolchain = true, github_actions = false },
       { workspace = terraform.workspace, count = 9007199254740993, nested = { enabled = true }, items = ["a", 2] }
     )
     error_message = "Telemetry must never fail."
@@ -100,7 +100,11 @@ check "capture" {
             assert all(check["status"] == "pass" for check in state["check_results"])
             assert all(event["properties"]["extra_data"]["count"] == 9007199254740993 for event in events)
             assert all("network" not in event["properties"] and "github" not in event["properties"] for event in events)
-            assert all(event["properties"]["machine"]["os"] for event in events)
+            assert all(event["properties"]["machine"]["os"]["name"] for event in events)
+            assert all(isinstance(event["properties"]["machine"]["memory_size"], int) and event["properties"]["machine"]["memory_size"] > 0 for event in events)
+            assert all(event["properties"]["terraform"]["workspace"] == "default" and event["properties"]["terraform"]["in_automation"] for event in events)
+            assert all(event["properties"]["toolchain"]["terraform"] and event["properties"]["toolchain"]["git"] for event in events)
+            assert all(event["properties"]["toolchain"]["telemetry_provider"] == "dev" for event in events)
             assert all(event["properties"]["git"]["name"] == work.name for event in events)
             assert all(event["properties"]["git"]["remote"] == "https://example.invalid/demo/infra.git" for event in events)
             assert all(event["properties"]["git"]["branch"] == "main" and event["properties"]["git"]["commit"] for event in events)
@@ -191,7 +195,7 @@ module "each" {
             terraform("plan", "-input=false")
             assert len(events) - before == 200, "instance keys did not preserve distinct instances"
             print("PASS: count=100 + for_each=100 -> 2 events per plan/saved apply; disabled deduplication or instance keys -> 200 events")
-            print(f"PASS: plan ({plan_count} captures), saved-plan apply ({apply_count} captures), no-change apply with HTTP 500, typed extra_data, working-directory Git metadata, optional options.cache_enabled=false, empty resource state")
+            print(f"PASS: plan ({plan_count} captures), saved-plan apply ({apply_count} captures), no-change apply with HTTP 500, typed extra_data, working-directory Git metadata, machine OS/memory, Terraform context, toolchain versions, optional options.cache_enabled=false, empty resource state")
     finally:
         server.shutdown()
         server.server_close()

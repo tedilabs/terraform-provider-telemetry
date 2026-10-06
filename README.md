@@ -72,7 +72,7 @@ Collected fields are grouped under `properties.machine`, `properties.network`, e
   "properties": {
     "$process_person_profile": false,
     "$geoip_disable": true,
-    "machine": { "os": "linux", "arch": "amd64", "cpu_count": 4 },
+    "machine": { "os": { "name": "Ubuntu", "version": "24.04" }, "arch": "amd64", "cpu_count": 4, "memory_size": 8192 },
     "extra_data": { "workspace": "production", "module": "aws-core" }
   }
 }
@@ -80,15 +80,17 @@ Collected fields are grouped under `properties.machine`, `properties.network`, e
 
 ## Collection options
 
-All five collector booleans must be present in the `options` object or map. The `cache_enabled` and `deduplication_enabled` booleans are optional and default to `true`. Optional `deduplication_keys` is a list of property paths; omitted or empty means compare all event properties. Only enabled collectors run. Missing tools, unavailable authentication, or an absent Git repository cause that metadata group to be omitted. A failed collector does not discard data from other collectors.
+The original five collector booleans (`machine`, `network`, `git`, `github`, `github_actions`) must be present in the `options` object or map. New `terraform` and `toolchain` collectors are optional and default to `false`. The `cache_enabled` and `deduplication_enabled` booleans are optional and default to `true`. Optional `deduplication_keys` is a list of property paths; omitted or empty means compare all event properties. Only enabled collectors run. Missing tools, unavailable authentication, or an absent Git repository cause that metadata group to be omitted. A failed collector does not discard data from other collectors.
 
 | Option | Collected fields | Source |
 | --- | --- | --- |
-| `machine` | `os`, `arch`, `cpu_count` | Go runtime; architecture is the provider binary's architecture |
-| `network` | `hostname`, `ips` | Local hostname and non-loopback IPv4/IPv6 interface addresses; no public-IP lookup service |
+| `machine` | `os.name`, `os.version` when available, `arch`, `cpu_count`, `memory_size` in MiB when available | OS release metadata and total system memory; architecture is the provider binary's architecture |
+| `network` | `hostname`, `public_ip` when available | Local hostname and the egress IPv4/IPv6 address observed by `https://api64.ipify.org`; no local interface enumeration |
 | `git` | `name`, `branch`, `commit`, `remote` when available | Git repository containing the Terraform process's working directory; `remote` is origin |
-| `github` | `login`, `id`, `name`, `html_url` when available | `gh api user` using the CLI's existing authentication and host configuration |
+| `github` | `login`, `id`, `name`, `html_url`, `account_type` when available | `gh api user` using the CLI's existing authentication and host configuration |
 | `github_actions` | Workflow/job/run, repository, actor, ref, and runner metadata | An allowlist of environment variables, only when `GITHUB_ACTIONS=true` |
+| `terraform` | `workspace`, `workspace_source`, `in_automation` | Workspace environment/selection file and `TF_IN_AUTOMATION`; no tool versions |
+| `toolchain` | `terraform`, `opentofu`, `git`, `github_cli`, `telemetry_provider` versions when available | Version commands on PATH and this provider's build version |
 
 Git metadata excludes local repository paths and file contents. URL userinfo, query strings, and fragments are removed from origin URLs; SCP-style SSH usernames are removed. Local filesystem remotes are omitted. GitHub metadata excludes tokens and email. No collector runs `gh auth login` or changes Git configuration.
 
@@ -96,9 +98,30 @@ GitHub Actions fields: `workflow`, `workflow_ref`, `workflow_sha`, `job`, `run_i
 
 For remote Terraform execution, these describe the runner, not the initiating user's workstation. Setting `network=false` disables explicit network metadata collection; an HTTP connection still necessarily reaches the configured ingestion host.
 
+When `network=true`, public IP lookup sends an unauthenticated HTTPS GET to [ipify](https://www.ipify.org/), with a two-second timeout within the overall five-second capture budget. No event properties or PostHog token are sent to ipify. The service sees the request's egress IP; NAT, VPNs, proxies, and destination-specific routing can make it differ from the host's interface addresses or the source seen by PostHog. It is not a stable user identifier. Standard HTTP proxy environment settings are honored.
+
+Invalid responses, unavailable service, or blocked outbound access omit `public_ip` while preserving other metadata. There are no redirects or retries; the network snapshot, including lookup failure, is cached by default. `cache_enabled=false` repeats the lookup. The former `network.ips` field is removed; internal interface addresses are never enumerated. Hostname and public IP remain identifying data. `public_ip` is a custom property, and GeoIP enrichment remains disabled.
+
+
+### Machine details
+
+`machine.os` is now an object `{ name, version }`, replacing the old OS string. macOS uses its product version; Linux uses `NAME` and `VERSION_ID` from `/etc/os-release` (falling back to `/usr/lib/os-release`); Windows uses its NT major/minor/build version. Unknown version fields are omitted. Other platforms retain an OS name but omit unsupported details.
+
+`memory_size` is an integer in **MiB**, calculated by dividing the OS-reported total memory bytes by 1,048,576 and rounding down. It is not free memory or a container's cgroup memory limit. macOS uses `hw.memsize`, Linux uses `sysinfo`, and Windows uses `GlobalMemoryStatusEx`. Unavailable memory values are omitted.
+
+### Terraform context and toolchain
+
+Enable these independently with `terraform = true` and `toolchain = true` inside `options`. Both participate in the same per-process collection cache and support `cache_enabled = false`.
+
+Terraform workspace resolution checks `TF_WORKSPACE` first, then the `environment` file under `TF_DATA_DIR` (default `.terraform`). A missing file implies `default`; unreadable/empty files omit the workspace. `workspace_source` is `environment`, `data_directory`, or `default`. This reflects local CLI workspace selection, not an authoritative HCP Terraform workspace identity; pass `terraform.workspace` explicitly in `extra_data` when that expression is needed. `in_automation` means `TF_IN_AUTOMATION` is non-empty, even if its literal value is `false`; it is not general CI detection. No state, backend configuration, credentials, or `TF_VAR_*` values are read.
+
+Toolchain checks `terraform version -json`, `tofu version -json`, `git --version`, and `gh --version` concurrently, bounded by the existing command and capture timeouts. It keeps only version strings, not provider selections, paths, or full command output. Missing tools and failed probes are omitted; `telemetry_provider` is the version supplied by this provider build (`dev` locally). Versions describe the tools resolved on PATH, which may differ from the CLI that launched the provider. Toolchain detection does not infer whether this run is Terraform or OpenTofu. Version-check checkpoint requests are disabled for subprocesses, but user-installed shims/wrappers can have their own behavior.
+
+GitHub `account_type` is the API's `type` value (for example, `User` or `Bot`), fetched with the existing user request. No additional GitHub API request is needed.
+
 ## Collection cache
 
-Predefined `machine`, `network`, `git`, `github`, and `github_actions` metadata is cached lazily for the lifetime of one provider process. Concurrent calls and separate function instances share these snapshots. Disabled collectors are not read or included, even if their data is already cached. Unavailable or partial results are also cached to avoid repeated failing commands.
+Predefined `machine`, `network`, `git`, `github`, `github_actions`, `terraform`, and `toolchain` metadata is cached lazily for the lifetime of one provider process. Concurrent calls and separate function instances share these snapshots. Disabled collectors are not read or included, even if their data is already cached. Unavailable or partial results are also cached to avoid repeated failing commands.
 
 Only these explicitly allowlisted groups are cached. `extra_data`, connection information, event IDs, and HTTP delivery are never cached. Collection caching only reduces collection work; the separate event deduplication below reduces PostHog event counts. New collectors must explicitly opt into caching.
 
@@ -176,7 +199,7 @@ go vet ./...
 python3 scripts/smoke_test.py
 ```
 
-The smoke test builds in a temporary directory, uses a loopback HTTP server and a synthetic Git repository, and verifies plan, saved-plan apply, no-change apply, HTTP failure handling, typed extra data, Git metadata, the optional `options.cache_enabled` setting, absence of resource state, and deduplication of 100 `count` plus 100 `for_each` module instances (including bypass and per-instance keys). It disables GitHub/network collectors and never sends real telemetry to PostHog.
+The smoke test builds in a temporary directory, uses a loopback HTTP server and a synthetic Git repository, and verifies plan, saved-plan apply, no-change apply, HTTP failure handling, typed extra data, Git metadata, OS/memory, Terraform context, toolchain versions, the optional `options.cache_enabled` setting, absence of resource state, and deduplication of 100 `count` plus 100 `for_each` module instances (including bypass and per-instance keys). It disables GitHub/network collectors and never sends real telemetry to PostHog.
 
 For manual development, create a separate CLI configuration file with an absolute path to the built binary directory:
 

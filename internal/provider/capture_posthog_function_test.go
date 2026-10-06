@@ -303,3 +303,56 @@ func TestCollectionOptionsValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestOptionalTerraformAndToolchainCategories(t *testing.T) {
+	original := processCollector
+	processCollector = telemetry.NewCollector()
+	t.Cleanup(func() { processCollector = original })
+	processCollector.Getenv = func(key string) string {
+		if key == "TF_WORKSPACE" {
+			return "prod"
+		}
+		return ""
+	}
+	processCollector.Run = func(context.Context, string, ...string) ([]byte, error) { return nil, fmt.Errorf("not installed") }
+	for _, name := range []string{"terraform", "toolchain"} {
+		for _, invalid := range []attr.Value{types.BoolNull(), types.BoolUnknown(), types.StringValue("true")} {
+			if _, ok := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: invalid})); ok {
+				t.Fatalf("invalid %s accepted", name)
+			}
+		}
+	}
+	defaults, ok := collectionOptions(types.DynamicValue(disabledOptions()))
+	if !ok || defaults.collect.Terraform || defaults.collect.Toolchain {
+		t.Fatal("new collectors enabled by default")
+	}
+	options := optionsWithAttributes(disabledOptions(), map[string]attr.Value{
+		"terraform": types.BoolValue(true), "toolchain": types.BoolValue(true), "deduplication_enabled": types.BoolValue(false),
+	})
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+	var sends int
+	http.DefaultTransport = testTransport(func(req *http.Request) (*http.Response, error) {
+		sends++
+		var payload map[string]any
+		if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+			t.Error(err)
+		}
+		props := payload["properties"].(map[string]any)
+		if props["terraform"].(map[string]any)["workspace"] != "prod" {
+			t.Error("missing workspace")
+		}
+		if props["toolchain"].(map[string]any)["telemetry_provider"] != "test-version" {
+			t.Error("missing build version")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("{}"))}, nil
+	})
+	p := New("test-version")().(*TelemetryProvider)
+	f := p.Functions(context.Background())[0]()
+	extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{}))
+	resp := function.RunResponse{}
+	f.Run(context.Background(), function.RunRequest{Arguments: function.NewArgumentsData([]attr.Value{connectionValue("https://example.invalid"), options, extra})}, &resp)
+	if resp.Error != nil || !resp.Result.Value().Equal(types.BoolValue(true)) || sends != 1 {
+		t.Fatalf("capture failed: %+v", resp)
+	}
+}

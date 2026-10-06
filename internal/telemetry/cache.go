@@ -5,7 +5,7 @@ import "sync"
 // Only these predefined groups may be cached. Each is collected lazily once,
 // including an unavailable result, to avoid repeated failing commands.
 type collectionCache struct {
-	machine, network, git, github, githubActions cachedCollection
+	machine, network, git, github, githubActions, terraform, toolchain cachedCollection
 }
 
 type cachedCollection struct {

@@ -30,6 +30,8 @@ check "telemetry" {
         git                   = false
         github                = false
         github_actions        = false
+        terraform             = true
+        toolchain             = true
         deduplication_enabled = true
         deduplication_keys    = ["extra_data.module", "extra_data.workspace"]
       },

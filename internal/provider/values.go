@@ -31,7 +31,7 @@ func optionsParameter() function.DynamicParameter {
 	// requires every declared attribute and cannot express this default.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		Description: "Object or map with required machine, network, git, github, and github_actions booleans. Optional cache_enabled and deduplication_enabled default to true. deduplication_keys selects dot-separated property paths; an omitted or empty list compares all event properties.",
+		Description: "Object or map with required machine, network, git, github, and github_actions booleans. Optional terraform and toolchain enable execution metadata and tool versions. Optional cache_enabled and deduplication_enabled default to true. deduplication_keys selects dot-separated property paths; an omitted or empty list compares all event properties.",
 	}
 }
 
@@ -57,6 +57,7 @@ func collectionOptions(options types.Dynamic) (captureOptions, bool) {
 		*target = value.ValueBool()
 	}
 	for key, target := range map[string]*bool{
+		"terraform": &opts.collect.Terraform, "toolchain": &opts.collect.Toolchain,
 		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
 	} {
 		if value, exists := attributes[key]; exists {

@@ -14,9 +14,11 @@ import (
 
 var _ function.Function = &CapturePostHogFunction{}
 
-type CapturePostHogFunction struct{}
+type CapturePostHogFunction struct{ providerVersion string }
 
-func NewCapturePostHogFunction() function.Function { return &CapturePostHogFunction{} }
+func NewCapturePostHogFunction() function.Function {
+	return &CapturePostHogFunction{providerVersion: "dev"}
+}
 
 func (f *CapturePostHogFunction) Metadata(_ context.Context, _ function.MetadataRequest, resp *function.MetadataResponse) {
 	resp.Name = "capture_posthog"
@@ -59,6 +61,9 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 	properties, opts, ok := collectProperties(ctx, options, extra)
 	if !ok {
 		return
+	}
+	if opts.collect.Toolchain {
+		properties["toolchain"].(map[string]any)["telemetry_provider"] = f.providerVersion
 	}
 	if ctx.Err() != nil {
 		return
