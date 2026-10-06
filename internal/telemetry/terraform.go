@@ -8,7 +8,7 @@ import (
 )
 
 func (c Collector) terraform() map[string]any {
-	result := map[string]any{"in_automation": c.Getenv("TF_IN_AUTOMATION") != ""}
+	result := map[string]any{}
 	if workspace := c.Getenv("TF_WORKSPACE"); workspace != "" {
 		result["workspace"], result["workspace_source"] = workspace, "environment"
 		return result

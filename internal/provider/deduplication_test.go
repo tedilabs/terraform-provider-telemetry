@@ -47,7 +47,7 @@ func TestCaptureDeduplicationConcurrentAndFailure(t *testing.T) {
 	defer server.Close()
 	options := optionsWithAttributes(disabledOptions(), map[string]attr.Value{
 		"deduplication_enabled": types.BoolValue(true),
-		"deduplication_keys":    types.TupleValueMust([]attr.Type{types.StringType}, []attr.Value{types.StringValue("extra_data.module")}),
+		"deduplication_keys":    types.TupleValueMust([]attr.Type{types.StringType}, []attr.Value{types.StringValue("module")}),
 	})
 	var wg sync.WaitGroup
 	for i := range 100 {
@@ -102,7 +102,7 @@ func TestCaptureDeduplicationMissingKeysAndConnections(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { sends.Add(1) }))
 	defer server.Close()
 	missing := optionsWithAttributes(disabledOptions(), map[string]attr.Value{
-		"deduplication_keys": types.ListValueMust(types.StringType, []attr.Value{types.StringValue("extra_data.version")}),
+		"deduplication_keys": types.ListValueMust(types.StringType, []attr.Value{types.StringValue("version")}),
 	})
 	for range 2 {
 		runCapture(t, context.Background(), connectionValue(server.URL), missing, moduleExtra("vpc", 0))
@@ -122,12 +122,12 @@ func TestDeduplicationOptionsValidation(t *testing.T) {
 	for name, values := range map[string][]attr.Value{
 		"deduplication_enabled": {types.BoolNull(), types.BoolUnknown(), types.StringValue("true")},
 		"deduplication_keys": {
-			types.StringValue("extra_data.module"), types.ListNull(types.StringType), types.ListUnknown(types.StringType),
+			types.StringValue("module"), types.ListNull(types.StringType), types.ListUnknown(types.StringType),
 			types.TupleValueMust([]attr.Type{types.BoolType}, []attr.Value{types.BoolValue(true)}),
 			types.ListValueMust(types.StringType, []attr.Value{types.StringNull()}),
 			types.ListValueMust(types.StringType, []attr.Value{types.StringUnknown()}),
 			types.ListValueMust(types.StringType, []attr.Value{types.StringValue("")}),
-			types.ListValueMust(types.StringType, []attr.Value{types.StringValue("extra_data..module")}),
+			types.ListValueMust(types.StringType, []attr.Value{types.StringValue("terraform..workspace")}),
 		},
 	} {
 		for _, value := range values {
@@ -137,11 +137,11 @@ func TestDeduplicationOptionsValidation(t *testing.T) {
 		}
 	}
 	for _, keys := range []attr.Value{
-		types.TupleValueMust([]attr.Type{types.StringType}, []attr.Value{types.StringValue("extra_data.module")}),
-		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("extra_data.module")}),
+		types.TupleValueMust([]attr.Type{types.StringType}, []attr.Value{types.StringValue("module")}),
+		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("module")}),
 	} {
 		opts, ok := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"deduplication_keys": keys}))
-		if !ok || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 1 || opts.deduplicationKeys[0] != "extra_data.module" {
+		if !ok || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 1 || opts.deduplicationKeys[0] != "module" {
 			t.Fatalf("valid keys were not decoded: %+v", opts)
 		}
 	}

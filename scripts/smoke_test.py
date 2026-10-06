@@ -62,7 +62,7 @@ check "capture" {
     condition = provider::telemetry::capture_posthog(
       var.connection,
       { machine = true, network = false, git = true, github = false, terraform = true, toolchain = true, github_actions = false },
-      { workspace = terraform.workspace, count = 9007199254740993, nested = { enabled = true }, items = ["a", 2] }
+      { workspace = terraform.workspace, count = 9007199254740993, nested = { enabled = true }, items = ["a", 2], machine = { os = { version = "smoke-override" } } }
     )
     error_message = "Telemetry must never fail."
   }
@@ -98,11 +98,12 @@ check "capture" {
             state = json.loads((work / "terraform.tfstate").read_text())
             assert state.get("resources", []) == [], state
             assert all(check["status"] == "pass" for check in state["check_results"])
-            assert all(event["properties"]["extra_data"]["count"] == 9007199254740993 for event in events)
+            assert all(event["properties"]["count"] == 9007199254740993 for event in events)
             assert all("network" not in event["properties"] and "github" not in event["properties"] for event in events)
-            assert all(event["properties"]["machine"]["os"]["name"] for event in events)
+            assert all(event["properties"]["machine"]["os"]["name"] and event["properties"]["machine"]["os"]["version"] == "smoke-override" for event in events)
+            assert all("extra_data" not in event["properties"] for event in events)
             assert all(isinstance(event["properties"]["machine"]["memory_size"], int) and event["properties"]["machine"]["memory_size"] > 0 for event in events)
-            assert all(event["properties"]["terraform"]["workspace"] == "default" and event["properties"]["terraform"]["in_automation"] for event in events)
+            assert all(event["properties"]["terraform"]["workspace"] == "default" and "in_automation" not in event["properties"]["terraform"] for event in events)
             assert all(event["properties"]["toolchain"]["terraform"] and event["properties"]["toolchain"]["git"] for event in events)
             assert all(event["properties"]["toolchain"]["telemetry_provider"] == "dev" for event in events)
             assert all(event["properties"]["git"]["name"] == work.name for event in events)
@@ -155,7 +156,7 @@ variable "deduplication_enabled" {
 }
 variable "deduplication_keys" {
   type = list(string)
-  default = ["extra_data.module", "extra_data.workspace"]
+  default = ["module", "workspace"]
 }
 module "counted" {
   source = "./module"
@@ -180,7 +181,7 @@ module "each" {
             before = len(events)
             terraform("plan", "-input=false", "-out=modules.tfplan")
             assert len(events) - before == 2, f"expected two module events, got {len(events) - before}"
-            assert {e["properties"]["extra_data"]["module"] for e in events[before:]} == {"counted", "each"}
+            assert {e["properties"]["module"] for e in events[before:]} == {"counted", "each"}
             before = len(events)
             result = subprocess.run(["terraform", "apply", "-input=false", "-no-color", "modules.tfplan"], cwd=work, env=env, text=True, capture_output=True)
             assert result.returncode == 0, result.stdout + result.stderr
@@ -190,7 +191,7 @@ module "each" {
             terraform("plan", "-input=false")
             assert len(events) - before == 200, f"disabled deduplication sent {len(events) - before} events"
             env["TF_VAR_deduplication_enabled"] = "true"
-            env["TF_VAR_deduplication_keys"] = json.dumps(["extra_data.module", "extra_data.instance"])
+            env["TF_VAR_deduplication_keys"] = json.dumps(["module", "instance"])
             before = len(events)
             terraform("plan", "-input=false")
             assert len(events) - before == 200, "instance keys did not preserve distinct instances"

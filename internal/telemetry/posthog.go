@@ -44,13 +44,11 @@ func CapturePostHog(ctx context.Context, connection PostHogConnection, propertie
 	id[8] = (id[8] & 0x3f) | 0x80
 	distinctID := fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:])
 
-	// Keep event properties separate from transport and identity controls.
-	props := make(map[string]any, len(properties)+2)
+	// Property defaults can be overridden; transport fields remain separate.
+	props := map[string]any{"$process_person_profile": false, "$geoip_disable": true}
 	for key, value := range properties {
 		props[key] = value
 	}
-	props["$process_person_profile"] = false
-	props["$geoip_disable"] = true
 	payload := map[string]any{
 		"api_key": connection.ProjectToken, "event": "terraform_capture",
 		"distinct_id": distinctID, "properties": props,

@@ -60,9 +60,9 @@ This source address is intended for publication; creating this repository does n
 - `host`: PostHog **ingestion** base URL: `https://us.i.posthog.com`, `https://eu.i.posthog.com`, or a self-hosted base URL. A base path is supported. The function appends `/i/v0/e/`.
 - `project_token`: PostHog project token, not a personal API key. It is sent only as the capture payload's `api_key`.
 
-Each non-duplicate invocation attempts to send `terraform_capture` with a fresh UUIDv4 `distinct_id`. It does not create a persistent installation identifier. `$process_person_profile` is `false`, and `$geoip_disable` is `true`. Counts describe retained capture attempts, **not module instance counts, unique people, or successful Terraform operations**.
+Each non-duplicate invocation attempts to send `terraform_capture` with a fresh UUIDv4 `distinct_id`. It does not create a persistent installation identifier. `$process_person_profile` defaults to `false`, and `$geoip_disable` defaults to `true`; `extra_data` can override these event properties. Counts describe retained capture attempts, **not module instance counts, unique people, or successful Terraform operations**.
 
-Collected fields are grouped under `properties.machine`, `properties.network`, etc. User-supplied values are preserved under `properties.extra_data`, avoiding collisions with collectors or PostHog control fields:
+Collected fields are grouped under `properties.machine`, `properties.network`, etc. Keys supplied in the `extra_data` argument are promoted directly into `properties`. There is no automatic `extra_data` wrapper. Objects/maps are merged recursively with collected fields; caller values win on conflicts. Lists, scalars, and explicit nulls replace existing values:
 
 ```json
 {
@@ -73,10 +73,17 @@ Collected fields are grouped under `properties.machine`, `properties.network`, e
     "$process_person_profile": false,
     "$geoip_disable": true,
     "machine": { "os": { "name": "Ubuntu", "version": "24.04" }, "arch": "amd64", "cpu_count": 4, "memory_size": 8192 },
-    "extra_data": { "workspace": "production", "module": "aws-core" }
+    "workspace": "production",
+    "module": "aws-core"
   }
 }
 ```
+
+For example, passing `{ machine = { os = { version = "custom" } }, module = "vpc" }` overrides only `machine.os.version`, keeps collected fields such as `machine.os.name` and `machine.arch`, and adds `properties.module`. Passing `machine = null` or a scalar replaces the entire collected `machine` value. Per-call overrides do not modify collection caches.
+
+The priority rule also applies to built-in `toolchain.telemetry_provider` and PostHog property defaults. Transport-level `api_key`, `event`, and `distinct_id` remain separate from the `properties` object: same-named extra keys become event properties, not transport overrides.
+
+**Migration:** Change deduplication paths such as `extra_data.module` to `module` (or `terraform.workspace` if the extra value is nested there). There is no legacy-prefix fallback. Deduplication runs on the final merged properties, including overrides and property defaults. Existing events already stored in PostHog keep their original structure.
 
 ## Collection options
 
@@ -89,7 +96,7 @@ The original five collector booleans (`machine`, `network`, `git`, `github`, `gi
 | `git` | `name`, `branch`, `commit`, `remote` when available | Git repository containing the Terraform process's working directory; `remote` is origin |
 | `github` | `login`, `id`, `name`, `html_url`, `account_type` when available | `gh api user` using the CLI's existing authentication and host configuration |
 | `github_actions` | Workflow/job/run, repository, actor, ref, and runner metadata | An allowlist of environment variables, only when `GITHUB_ACTIONS=true` |
-| `terraform` | `workspace`, `workspace_source`, `in_automation` | Workspace environment/selection file and `TF_IN_AUTOMATION`; no tool versions |
+| `terraform` | `workspace`, `workspace_source` | Workspace environment/selection file; no tool versions |
 | `toolchain` | `terraform`, `opentofu`, `git`, `github_cli`, `telemetry_provider` versions when available | Version commands on PATH and this provider's build version |
 
 Git metadata excludes local repository paths and file contents. URL userinfo, query strings, and fragments are removed from origin URLs; SCP-style SSH usernames are removed. Local filesystem remotes are omitted. GitHub metadata excludes tokens and email. No collector runs `gh auth login` or changes Git configuration.
@@ -100,7 +107,7 @@ For remote Terraform execution, these describe the runner, not the initiating us
 
 When `network=true`, public IP lookup sends an unauthenticated HTTPS GET to [ipify](https://www.ipify.org/), with a two-second timeout within the overall five-second capture budget. No event properties or PostHog token are sent to ipify. The service sees the request's egress IP; NAT, VPNs, proxies, and destination-specific routing can make it differ from the host's interface addresses or the source seen by PostHog. It is not a stable user identifier. Standard HTTP proxy environment settings are honored.
 
-Invalid responses, unavailable service, or blocked outbound access omit `public_ip` while preserving other metadata. There are no redirects or retries; the network snapshot, including lookup failure, is cached by default. `cache_enabled=false` repeats the lookup. The former `network.ips` field is removed; internal interface addresses are never enumerated. Hostname and public IP remain identifying data. `public_ip` is a custom property, and GeoIP enrichment remains disabled.
+Invalid responses, unavailable service, or blocked outbound access omit `public_ip` while preserving other metadata. There are no redirects or retries; the network snapshot, including lookup failure, is cached by default. `cache_enabled=false` repeats the lookup. The former `network.ips` field is removed; internal interface addresses are never enumerated. Hostname and public IP remain identifying data. `public_ip` is a custom property, and GeoIP enrichment is disabled by default unless overridden through `extra_data`.
 
 
 ### Machine details
@@ -113,7 +120,7 @@ Invalid responses, unavailable service, or blocked outbound access omit `public_
 
 Enable these independently with `terraform = true` and `toolchain = true` inside `options`. Both participate in the same per-process collection cache and support `cache_enabled = false`.
 
-Terraform workspace resolution checks `TF_WORKSPACE` first, then the `environment` file under `TF_DATA_DIR` (default `.terraform`). A missing file implies `default`; unreadable/empty files omit the workspace. `workspace_source` is `environment`, `data_directory`, or `default`. This reflects local CLI workspace selection, not an authoritative HCP Terraform workspace identity; pass `terraform.workspace` explicitly in `extra_data` when that expression is needed. `in_automation` means `TF_IN_AUTOMATION` is non-empty, even if its literal value is `false`; it is not general CI detection. No state, backend configuration, credentials, or `TF_VAR_*` values are read.
+Terraform workspace resolution checks `TF_WORKSPACE` first, then the `environment` file under `TF_DATA_DIR` (default `.terraform`). A missing file implies `default`; unreadable/empty files omit the workspace. `workspace_source` is `environment`, `data_directory`, or `default`. This reflects local CLI workspace selection, not an authoritative HCP Terraform workspace identity; pass `terraform.workspace` explicitly in `extra_data` when that expression is needed. No state, backend configuration, credentials, or `TF_VAR_*` values are read.
 
 Toolchain checks `terraform version -json`, `tofu version -json`, `git --version`, and `gh --version` concurrently, bounded by the existing command and capture timeouts. It keeps only version strings, not provider selections, paths, or full command output. Missing tools and failed probes are omitted; `telemetry_provider` is the version supplied by this provider build (`dev` locally). Versions describe the tools resolved on PATH, which may differ from the CLI that launched the provider. Toolchain detection does not infer whether this run is Terraform or OpenTofu. Version-check checkpoint requests are disabled for subprocesses, but user-installed shims/wrappers can have their own behavior.
 
@@ -141,7 +148,7 @@ Omitting `cache_enabled` enables caching. An explicit null, unknown, or non-bool
 
 ## Event deduplication
 
-Deduplication is enabled by default and shared across function instances within one provider process. With no `deduplication_keys` (or `[]`), only events with identical collected metadata and `extra_data` are suppressed. Set `deduplication_enabled = false` to bypass both lookup and recording; this is independent of `cache_enabled`.
+Deduplication is enabled by default and shared across function instances within one provider process. With no `deduplication_keys` (or `[]`), only events with identical final merged properties are suppressed. Set `deduplication_enabled = false` to bypass both lookup and recording; this is independent of `cache_enabled`.
 
 To collapse repeated module instances from `for_each` or `count`, select only module-level properties:
 
@@ -156,7 +163,7 @@ provider::telemetry::capture_posthog(
     github_actions        = false
     cache_enabled         = true
     deduplication_enabled = true
-    deduplication_keys    = ["extra_data.module", "extra_data.version", "extra_data.workspace"]
+    deduplication_keys    = ["module", "version", "workspace"]
   },
   {
     module    = "tedilabs/example/aws"
@@ -168,7 +175,7 @@ provider::telemetry::capture_posthog(
 
 If these values are the same for 100 instances, at most one event is attempted in that provider process. To retain one event for each instance instead, pass an instance identifier in `extra_data` and include its path in `deduplication_keys`. Pass a project identifier too when distinct root configurations need separate identities.
 
-- Paths start at the event properties, e.g. `extra_data.module` or `machine.os`; do not prefix them with `properties.`. Dot-separated paths traverse objects/maps, with no array indexing or escaping for keys containing dots. A path may select a whole object or list.
+- Paths start at the event properties, e.g. `module` or `machine.os`; do not prefix them with `properties.`. Dot-separated paths traverse objects/maps, with no array indexing or escaping for keys containing dots. A path may select a whole object or list.
 - All selected paths and their values form the identity. Key order and repeated keys do not matter. Value types and array order matter. The host, project token, and capture destination are always part of the scope, so separate destinations cannot suppress each other's events. Generated event IDs are excluded.
 - If any selected path is missing (including metadata from a disabled/unavailable collector), the call sends normally without consulting or updating deduplication state. An explicitly present `null` is a comparable value. Malformed option types or empty path segments skip capture and return `true`.
 - The first concurrent caller reserves the identity before sending. Later duplicates return `true` without sending, even if the first attempt fails. There are no retries. Only identity hashes are stored in memory.

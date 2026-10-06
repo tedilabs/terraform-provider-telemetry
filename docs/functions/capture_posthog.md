@@ -20,7 +20,7 @@ All three arguments are positional and required. Optional `options.cache_enabled
 
 1. `connection`: `{ host = string, project_token = string }`. Use an ingestion base URL such as `https://us.i.posthog.com`. The function appends `/i/v0/e/`. Connection configuration is supplied here, not in a `provider` block.
 2. `options`: An object or map with required boolean attributes `machine`, `network`, `git`, `github`, and `github_actions`. Optional `terraform` and `toolchain` default to `false`. Enable only the desired collectors. Optional `cache_enabled` defaults to `true`; set it to `false` to bypass metadata cache reads and writes. Optional `deduplication_enabled` defaults to `true`; set it to `false` to bypass event deduplication. Optional `deduplication_keys` is a list of dot-separated property paths; omission or `[]` compares all event properties.
-3. `extra_data`: An object or map with arbitrary JSON-compatible values. Nested structures, strings, numbers, booleans, and null are preserved under `properties.extra_data`. Pass `{}` when empty.
+3. `extra_data`: An object or map with arbitrary JSON-compatible values. Its keys are deep-merged directly into event properties. Objects/maps merge recursively; caller values take precedence, with lists, scalars, and null replacing existing values. No automatic `extra_data` wrapper is created. Pass `{}` when empty.
 
 ## Example
 
@@ -48,14 +48,14 @@ Declare `tedilabs/telemetry` in `required_providers` and declare the referenced 
 | `git` | Repository basename, branch, commit, sanitized origin URL |
 | `github` | Authenticated `gh` user's login, ID, name, profile URL, `account_type` (`type` from GitHub) |
 | `github_actions` | Workflow, job key, run identifiers, repository, actor, refs, runner information, run URL |
-| `terraform` | Workspace, workspace source, `TF_IN_AUTOMATION` flag |
+| `terraform` | Workspace, workspace source |
 | `toolchain` | Terraform, OpenTofu, Git, GitHub CLI, telemetry provider version strings |
 
-Collectors use the Terraform process's execution environment. Disabled collectors do not run. Unavailable Git repositories/tools/authentication are skipped. GitHub Actions metadata is only included when `GITHUB_ACTIONS=true`. No GitHub login, token collection, local interface enumeration, or full environment dump is performed. When `network=true`, public IP is looked up using an unauthenticated HTTPS GET to `https://api64.ipify.org` with a two-second timeout and no redirects or retries. Failed/invalid responses omit `public_ip`; other metadata remains available. The result reflects NAT/VPN/proxy egress, and can differ by destination. No event properties or PostHog token are sent to ipify. The network snapshot (including a failed lookup) is cached by default; `cache_enabled=false` repeats the lookup. The previous `network.ips` field has been removed. Hostname and public IP are identifying data; GeoIP enrichment remains disabled.
+Collectors use the Terraform process's execution environment. Disabled collectors do not run. Unavailable Git repositories/tools/authentication are skipped. GitHub Actions metadata is only included when `GITHUB_ACTIONS=true`. No GitHub login, token collection, local interface enumeration, or full environment dump is performed. When `network=true`, public IP is looked up using an unauthenticated HTTPS GET to `https://api64.ipify.org` with a two-second timeout and no redirects or retries. Failed/invalid responses omit `public_ip`; other metadata remains available. The result reflects NAT/VPN/proxy egress, and can differ by destination. No event properties or PostHog token are sent to ipify. The network snapshot (including a failed lookup) is cached by default; `cache_enabled=false` repeats the lookup. The previous `network.ips` field has been removed. Hostname and public IP are identifying data; GeoIP enrichment defaults to disabled, unless overridden through `extra_data`.
 
 ## Behavior
 
-Each capture has a fresh UUIDv4 `distinct_id`; person profile processing and GeoIP enrichment are disabled. No stable user identity is inferred. Collected metadata and extra data occupy separate namespaces.
+Each capture has a fresh UUIDv4 `distinct_id`; person profile processing and GeoIP enrichment are disabled by default (overridable via `$process_person_profile` and `$geoip_disable` in `extra_data`). No stable user identity is inferred. Extra keys share the event-property namespace with collected metadata and take precedence. Transport-level `api_key`, `event`, and `distinct_id` remain separate. Overrides do not modify collection caches.
 
 Null connection/options, unknown data, invalid connection contents, and non-object extra data skip capture and return true. Null `extra_data` becomes `{}`. Terraform itself can still reject malformed argument types or fail to load the provider.
 
@@ -75,14 +75,14 @@ Set these attributes inside `options` to send at most one event per module/versi
 
 ```hcl
 deduplication_enabled = true
-deduplication_keys    = ["extra_data.module", "extra_data.version", "extra_data.workspace"]
+deduplication_keys    = ["module", "version", "workspace"]
 ```
 
 Pass those values through `extra_data`. Repeated `for_each`/`count` instances then share an identity. To send once per instance instead, also pass and select an instance identifier. The first caller's full properties are sent; this does not aggregate instance counts or preserve differences in unselected fields.
 
-Paths are relative to event properties (`extra_data.module`, `machine.os`), not prefixed with `properties.`. They traverse objects/maps; array indexing and escaping literal dots in keys are not supported. Entire objects/lists can be selected. Key order and duplicate keys do not affect identity, while value types and array order do. Host, project token, and capture destination always separate identities. Generated UUIDs are excluded.
+Paths are relative to event properties (`module`, `machine.os`), not prefixed with `properties.`. They traverse objects/maps; array indexing and escaping literal dots in keys are not supported. Entire objects/lists can be selected. Key order and duplicate keys do not affect identity, while value types and array order do. Host, project token, and capture destination always separate identities. Generated UUIDs are excluded.
 
-Omitted/empty keys compare all collected properties and `extra_data`. Missing selected paths bypass deduplication for that call without recording it, while explicitly present null values can be compared. Null/unknown/incorrectly typed options and paths with empty segments skip capture and return `true`.
+Omitted/empty keys compare the final merged properties after applying overrides and PostHog property defaults. Missing selected paths bypass deduplication for that call without recording it, while explicitly present null values can be compared. Null/unknown/incorrectly typed options and paths with empty segments skip capture and return `true`.
 
 Deduplication atomically records an attempt before sending, including failed attempts, with no retries. It stores only hashes, is shared by concurrent function instances, and resets when the provider process exits. Different plan/apply provider processes can each send an event. `deduplication_enabled = false` neither reads nor writes this state; `cache_enabled = false` only affects metadata collection.
 
@@ -90,6 +90,12 @@ Deduplication atomically records an attempt before sending, including failed att
 
 `machine.os` replaces the previous string with an object `{ name, version }`. macOS reports its product version, Linux reports distribution `NAME`/`VERSION_ID` from os-release, and Windows reports the NT major/minor/build version. Unsupported or unavailable versions are omitted. `memory_size` is OS-reported total memory in integer MiB (bytes / 1,048,576, rounded down), not free memory or a container memory limit. macOS, Linux, and Windows support memory collection; unavailable values are omitted.
 
-`terraform` and `toolchain` are opt-in booleans in `options` and use the existing collection cache. `terraform.workspace` is resolved from `TF_WORKSPACE`, then the `environment` file inside `TF_DATA_DIR` (default `.terraform`), with `default` used for a missing file. The `workspace_source` identifies `environment`, `data_directory`, or `default`. Unreadable/empty files omit the workspace. This is local CLI selection metadata, not a guaranteed HCP Terraform workspace identity. `in_automation` checks whether `TF_IN_AUTOMATION` is non-empty, not whether CI was detected. State files, backend configuration, and `TF_VAR_*` values are not read.
+`terraform` and `toolchain` are opt-in booleans in `options` and use the existing collection cache. `terraform.workspace` is resolved from `TF_WORKSPACE`, then the `environment` file inside `TF_DATA_DIR` (default `.terraform`), with `default` used for a missing file. The `workspace_source` identifies `environment`, `data_directory`, or `default`. Unreadable/empty files omit the workspace. This is local CLI selection metadata, not a guaranteed HCP Terraform workspace identity. State files, backend configuration, and `TF_VAR_*` values are not read.
 
 `toolchain` contains version strings under `terraform`, `opentofu`, `git`, `github_cli`, and `telemetry_provider`. Version probes run concurrently with existing timeouts; missing/failed tools are omitted. These are versions of tools found on PATH, not proof of which executable invoked this provider. Provider selections and full command output are excluded. All tool versions live here, not in `terraform`. GitHub `account_type` uses the existing user API request.
+
+## Extra data merge and migration
+
+Given collected `machine = { os = { name = "Linux", version = "old" }, arch = "amd64" }`, extra data `{ machine = { os = { version = "custom" } }, module = "vpc" }` produces `machine = { os = { name = "Linux", version = "custom" }, arch = "amd64" }` and a top-level `module = "vpc"` property. Arrays are replaced, not concatenated. Explicit null is an override, not an instruction to delete a key. Replacing a whole group with a scalar/null is also supported.
+
+Update old `deduplication_keys` entries from `extra_data.module` to `module`, and similarly for other promoted fields. There is no implicit legacy-prefix fallback. To override a built-in workspace, use `{ terraform = { workspace = terraform.workspace } }` and deduplicate by `terraform.workspace`. Historical PostHog events are not rewritten.

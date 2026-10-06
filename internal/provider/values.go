@@ -122,8 +122,27 @@ func collectProperties(ctx context.Context, options types.Dynamic, extra types.D
 		}
 	}
 	properties := processCollector.Collect(ctx, opts.collect, opts.cacheEnabled)
-	properties["extra_data"] = extraData
+	properties = mergeProperties(properties, extraData)
 	return properties, opts, true
+}
+
+// Objects merge recursively. Other values (including lists and null) are
+// replaced by the caller's value. Neither input map is modified.
+func mergeProperties(base, overrides map[string]any) map[string]any {
+	result := make(map[string]any, len(base)+len(overrides))
+	for key, value := range base {
+		result[key] = value
+	}
+	for key, value := range overrides {
+		baseObject, baseOK := result[key].(map[string]any)
+		overrideObject, overrideOK := value.(map[string]any)
+		if baseOK && overrideOK {
+			result[key] = mergeProperties(baseObject, overrideObject)
+		} else {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 func fullyKnown(ctx context.Context, value attr.Value) bool {

@@ -63,7 +63,7 @@ func runCapture(t *testing.T, ctx context.Context, args ...attr.Value) {
 	}
 }
 
-func TestCapturePreservesExtraDataTypesAndNamespaces(t *testing.T) {
+func TestCaptureFlattensExtraDataAndPreservesTypes(t *testing.T) {
 	var count atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		count.Add(1)
@@ -75,10 +75,13 @@ func TestCapturePreservesExtraDataTypesAndNamespaces(t *testing.T) {
 			return
 		}
 		properties := payload["properties"].(map[string]any)
-		if len(properties) != 3 {
-			t.Errorf("disabled collectors were present: %v", properties)
+		if len(properties) != 9 {
+			t.Errorf("unexpected property count: %v", properties)
 		}
-		extra := properties["extra_data"].(map[string]any)
+		if _, wrapped := properties["extra_data"]; wrapped {
+			t.Error("extra_data wrapper remains")
+		}
+		extra := properties
 		if extra["count"] != json.Number("9007199254740993") || extra["enabled"] != true || extra["nullable"] != nil {
 			t.Errorf("extra_data lost types or precision: %v", extra)
 		}
@@ -180,7 +183,8 @@ func TestCaptureCachesOnlyPredefinedMetadata(t *testing.T) {
 	attributes["github"] = types.BoolValue(true)
 	opts := types.ObjectValueMust(optionTypes, attributes)
 	for i, flag := range []attr.Value{nil, types.BoolValue(true), types.BoolValue(false), types.BoolValue(true)} {
-		extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{"github": types.Int64Type}, map[string]attr.Value{"github": types.Int64Value(int64(i))}))
+		github := types.ObjectValueMust(map[string]attr.Type{"sample": types.Int64Type}, map[string]attr.Value{"sample": types.Int64Value(int64(i))})
+		extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{"github": github.Type(context.Background())}, map[string]attr.Value{"github": github}))
 		args := []attr.Value{connectionValue("https://example.invalid"), optionsWithCache(opts, flag), extra}
 		// Each call constructs a new function instance, as the framework may do.
 		runCapture(t, context.Background(), args...)
@@ -190,7 +194,7 @@ func TestCaptureCachesOnlyPredefinedMetadata(t *testing.T) {
 			if i == 2 {
 				wantUser = "user-2"
 			}
-			if props["github"].(map[string]any)["login"] != wantUser || props["extra_data"].(map[string]any)["github"] != float64(i) {
+			if props["github"].(map[string]any)["login"] != wantUser || props["github"].(map[string]any)["sample"] != float64(i) {
 				t.Fatalf("stale extra_data or wrong cache behavior: %v", props)
 			}
 		default:

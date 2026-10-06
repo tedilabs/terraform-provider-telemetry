@@ -33,7 +33,7 @@ check "telemetry" {
         terraform             = true
         toolchain             = true
         deduplication_enabled = true
-        deduplication_keys    = ["extra_data.module", "extra_data.workspace"]
+        deduplication_keys    = ["module", "workspace"]
       },
       {
         workspace = terraform.workspace

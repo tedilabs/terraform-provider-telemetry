@@ -37,7 +37,7 @@ func (f *CapturePostHogFunction) Definition(_ context.Context, _ function.Defini
 			optionsParameter(),
 			function.DynamicParameter{
 				Name: "extra_data", AllowNullValue: true, AllowUnknownValues: true,
-				Description: "Additional key/value data as an object or map, preserved under properties.extra_data. Pass {} when empty.",
+				Description: "Additional key/value data as an object or map, deep-merged into event properties with caller values taking precedence. Objects merge recursively; lists, scalars, and null replace existing values. Pass {} when empty.",
 			},
 		},
 		Return: function.BoolReturn{},
@@ -63,8 +63,14 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 		return
 	}
 	if opts.collect.Toolchain {
-		properties["toolchain"].(map[string]any)["telemetry_provider"] = f.providerVersion
+		properties = mergeProperties(map[string]any{
+			"toolchain": map[string]any{"telemetry_provider": f.providerVersion},
+		}, properties)
 	}
+	// Deduplicate the final properties, including overridable PostHog defaults.
+	properties = mergeProperties(map[string]any{
+		"$process_person_profile": false, "$geoip_disable": true,
+	}, properties)
 	if ctx.Err() != nil {
 		return
 	}

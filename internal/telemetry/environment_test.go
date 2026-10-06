@@ -78,8 +78,8 @@ func TestTerraformWorkspaceSources(t *testing.T) {
 		} else if got["workspace"] != test.workspace || got["workspace_source"] != test.source {
 			t.Fatalf("wrong workspace: %v", got)
 		}
-		if got["in_automation"] != (test.env["TF_IN_AUTOMATION"] != "") {
-			t.Fatal("wrong automation flag")
+		if _, ok := got["in_automation"]; ok {
+			t.Fatal("unexpected automation flag")
 		}
 	}
 }

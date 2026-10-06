@@ -34,13 +34,13 @@ func TestPostHogPayload(t *testing.T) {
 		if props["$process_person_profile"] != false || props["$geoip_disable"] != true {
 			t.Error("unexpected identity settings")
 		}
-		if props["extra_data"].(map[string]any)["workspace"] != "test" {
+		if props["workspace"] != "test" {
 			t.Error("missing extra data")
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
-	CapturePostHog(context.Background(), PostHogConnection{server.URL + "/prefix/", "test-token"}, map[string]any{"extra_data": map[string]any{"workspace": "test"}})
+	CapturePostHog(context.Background(), PostHogConnection{server.URL + "/prefix/", "test-token"}, map[string]any{"workspace": "test"})
 	if requests.Load() != 1 {
 		t.Fatalf("expected one request, got %d", requests.Load())
 	}
