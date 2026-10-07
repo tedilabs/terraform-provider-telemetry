@@ -1,0 +1,49 @@
+version: 2
+project_name: terraform-provider-telemetry
+
+builds:
+- env:
+  - CGO_ENABLED=0
+  flags:
+  - -trimpath
+  ldflags:
+  - -s -w -X main.version={{ .Version }}
+  mod_timestamp: '{{ .CommitTimestamp }}'
+  binary: '{{ .ProjectName }}_v{{ .Version }}'
+  goos: [linux, darwin, windows]
+  goarch: [amd64, arm64]
+
+archives:
+- formats: [zip]
+  name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+  files:
+  - LICENSE
+
+checksum:
+  algorithm: sha256
+  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
+  extra_files:
+  - glob: terraform-registry-manifest.json
+    name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+
+signs:
+- artifacts: checksum
+  args:
+  - --batch
+  - --local-user
+  - '{{ .Env.GPG_FINGERPRINT }}'
+  - --output
+  - '${signature}'
+  - --detach-sign
+  - '${artifact}'
+
+release:
+  github:
+    owner: tedilabs
+    name: terraform-provider-telemetry
+  extra_files:
+  - glob: terraform-registry-manifest.json
+    name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
+
+changelog:
+  sort: asc
