@@ -1,0 +1,13 @@
+":pencil2: documentation":
+- changed-files:
+  - any-glob-to-any-file:
+    - '**/*.md'
+
+":pencil2: maintenance":
+- changed-files:
+  - any-glob-to-any-file:
+    - .github/**
+    - .mise/**
+    - mise.toml
+    - go.mod
+    - go.sum
