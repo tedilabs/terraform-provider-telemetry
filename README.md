@@ -197,7 +197,7 @@ References: [Terraform function concepts](https://developer.hashicorp.com/terraf
 
 ## Development
 
-Requires Go 1.25+ and Terraform 1.8+ for the acceptance tests.
+Requires Go 1.26+ and Terraform 1.8+ for the acceptance tests.
 
 ```sh
 go build -o bin/terraform-provider-telemetry .
@@ -208,7 +208,7 @@ TF_ACC=1 TF_ACC_TERRAFORM_PATH="$(mise which terraform)" go test -race -run '^Te
 
 The acceptance tests use `terraform-plugin-testing` and a loopback HTTP server. They build the current provider into a temporary filesystem mirror, so Terraform launches real provider processes for each plan and saved-plan apply without downloading a published provider. This preserves the process boundaries of the metadata cache and event deduplication; in-process provider factories would share those globals across Terraform commands.
 
-The tests verify HTTP failure handling on repeated no-change applications, typed extra data, sanitized Git metadata from a synthetic repository, OS/memory, Terraform context, toolchain versions, `options.cache_enabled`, passing check blocks, empty resource state, and deduplication of 100 `count` plus 100 `for_each` module instances (including bypass and per-instance keys). Network/GitHub collectors are disabled, and no events reach real PostHog. Normal `go test` skips these tests unless `TF_ACC=1`; set `TF_ACC_TERRAFORM_PATH` to the Terraform binary to test (the command above uses mise's selected version). CI runs them with Terraform 1.8.5 and 1.15.6.
+The tests verify HTTP failure handling on repeated no-change applications, typed extra data, sanitized Git metadata from a synthetic repository, OS/memory, Terraform context, toolchain versions, `options.cache_enabled`, passing check blocks, empty resource state, and deduplication of 100 `count` plus 100 `for_each` module instances (including bypass and per-instance keys). Network/GitHub collectors are disabled, and no events reach real PostHog. Normal `go test` skips these tests unless `TF_ACC=1`; set `TF_ACC_TERRAFORM_PATH` to the Terraform binary to test (the command above uses mise's selected version). CI runs them with Terraform 1.8.5 and 1.16.5.
 
 For manual development, create a separate CLI configuration file with an absolute path to the built binary directory:
 
