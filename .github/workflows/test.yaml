@@ -1,60 +1,132 @@
 name: Test
 
+
 on:
-  pull_request: {}
   push:
-    branches: [main]
+    branches:
+    - main
+
+  pull_request: {}
+
 
 permissions:
   contents: read
+
+
+env:
+  GOTOOLCHAIN: local
+
 
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
+
 jobs:
   test:
     name: Go / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        os:
+        - ubuntu-latest
+        - macos-latest
+        - windows-latest
+
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up Go
+      uses: tedilabs/github-actions/.github/actions/mise.setup-tools@main
       with:
-        go-version-file: go.mod
-    - run: go test -race -timeout 60s ./...
-    - run: go vet ./...
+        install_args: go
+        cache_key: "{{default}}-${{ hashFiles('go.mod') }}"
+
+    - name: Resolve Go cache paths
+      id: go-cache
+      shell: bash
+      run: |
+        {
+          echo "modules=$(go env GOMODCACHE)"
+          echo "build=$(go env GOCACHE)"
+          echo "version=$(go env GOVERSION)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Cache Go modules and build outputs
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: |
+          ${{ steps.go-cache.outputs.modules }}
+          ${{ steps.go-cache.outputs.build }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-${{ hashFiles('go.mod', 'go.sum') }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-
+
+    - name: Run Go tests
+      run: go test -race -timeout 60s ./...
+
+    - name: Check Go with vet
+      run: go vet ./...
 
   terraform:
     name: Terraform / ${{ matrix.terraform }}
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
-        terraform: ['1.8.5', '1.15.6']
+        terraform:
+        - '1.8.5'
+        - '1.15.6'
+
+    env:
+      MISE_TERRAFORM_VERSION: ${{ matrix.terraform }}
+
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-      with:
-        go-version-file: go.mod
-    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-      with:
-        python-version: '3.x'
-    - name: Set up Terraform
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up Go and Terraform
       uses: tedilabs/github-actions/.github/actions/mise.setup-tools@main
       with:
-        mise_toml: |
-          [tools]
-          terraform = "${{ matrix.terraform }}"
-        install_args: terraform
+        install_args: go terraform
+        cache_key: "{{default}}-${{ hashFiles('go.mod') }}-terraform-${{ matrix.terraform }}"
+
+    - name: Resolve Go cache paths
+      id: go-cache
+      shell: bash
+      run: |
+        {
+          echo "modules=$(go env GOMODCACHE)"
+          echo "build=$(go env GOCACHE)"
+          echo "version=$(go env GOVERSION)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Cache Go modules and build outputs
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: |
+          ${{ steps.go-cache.outputs.modules }}
+          ${{ steps.go-cache.outputs.build }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-${{ hashFiles('go.mod', 'go.sum') }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-
+
+    - name: Set up Python
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      with:
+        python-version: '3.x'
+
     - name: Check Go formatting
       run: test -z "$(gofmt -l .)"
+
     - name: Check Terraform formatting
       uses: tedilabs/github-actions/.github/actions/terraform.fmt@main
       with:
         target_dir: examples
+
     - name: Exercise plan and apply against a local capture server
       run: python3 scripts/smoke_test.py

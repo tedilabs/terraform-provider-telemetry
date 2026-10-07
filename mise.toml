@@ -1,2 +1,4 @@
 [tools]
+# Keep CI on the Go version declared in go.mod, without a second version pin.
+go = "{{ read_file(path='go.mod') | regex_replace(pattern='(?ms)^.*?^go[[:blank:]]+([0-9.]+).*$', rep='$1') }}"
 terraform = "1.15.6"
