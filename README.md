@@ -228,3 +228,7 @@ Set `TF_CLI_CONFIG_FILE` to that file when running Terraform. A function-only ex
 3. Register the constructor in `TelemetryProvider.Functions`, and add function docs, sender tests, and a local-only Terraform smoke scenario.
 
 No generic backend registry or additional destination is implemented until one is needed.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
