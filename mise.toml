@@ -1,2 +1,5 @@
 [tools]
 terraform = "1.15.6"
+
+[settings]
+idiomatic_version_file_enable_tools = ["go"]

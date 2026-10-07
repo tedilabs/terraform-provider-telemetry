@@ -197,16 +197,18 @@ References: [Terraform function concepts](https://developer.hashicorp.com/terraf
 
 ## Development
 
-Requires Go 1.25+, Terraform 1.8+, and Python 3 for the CLI smoke test.
+Requires Go 1.25+ and Terraform 1.8+ for the acceptance tests.
 
 ```sh
 go build -o bin/terraform-provider-telemetry .
 go test -race -timeout 60s ./...
 go vet ./...
-python3 scripts/smoke_test.py
+TF_ACC=1 TF_ACC_TERRAFORM_PATH="$(mise which terraform)" go test -race -run '^TestAcc' -count=1 -timeout 10m ./internal/provider
 ```
 
-The smoke test builds in a temporary directory, uses a loopback HTTP server and a synthetic Git repository, and verifies plan, saved-plan apply, no-change apply, HTTP failure handling, typed extra data, Git metadata, OS/memory, Terraform context, toolchain versions, the optional `options.cache_enabled` setting, absence of resource state, and deduplication of 100 `count` plus 100 `for_each` module instances (including bypass and per-instance keys). It disables GitHub/network collectors and never sends real telemetry to PostHog.
+The acceptance tests use `terraform-plugin-testing` and a loopback HTTP server. They build the current provider into a temporary filesystem mirror, so Terraform launches real provider processes for each plan and saved-plan apply without downloading a published provider. This preserves the process boundaries of the metadata cache and event deduplication; in-process provider factories would share those globals across Terraform commands.
+
+The tests verify HTTP failure handling on repeated no-change applications, typed extra data, sanitized Git metadata from a synthetic repository, OS/memory, Terraform context, toolchain versions, `options.cache_enabled`, passing check blocks, empty resource state, and deduplication of 100 `count` plus 100 `for_each` module instances (including bypass and per-instance keys). Network/GitHub collectors are disabled, and no events reach real PostHog. Normal `go test` skips these tests unless `TF_ACC=1`; set `TF_ACC_TERRAFORM_PATH` to the Terraform binary to test (the command above uses mise's selected version). CI runs them with Terraform 1.8.5 and 1.15.6.
 
 For manual development, create a separate CLI configuration file with an absolute path to the built binary directory:
 
@@ -225,7 +227,7 @@ Set `TF_CLI_CONFIG_FILE` to that file when running Terraform. A function-only ex
 
 1. Add `capture_<destination>` in `internal/provider`, retaining three required positional arguments and the optional cache/deduplication settings in `options`. Define that destination's `connection` object, reuse `optionsParameter()`, `collectProperties()`, and the process deduplicator with a distinct destination/connection scope, and always return `true`.
 2. Add the destination's sender in `internal/telemetry`; keep transport logic separate from the collectors in `collect.go`.
-3. Register the constructor in `TelemetryProvider.Functions`, and add function docs, sender tests, and a local-only Terraform smoke scenario.
+3. Register the constructor in `TelemetryProvider.Functions`, and add function docs, sender tests, and a local-only Terraform acceptance scenario.
 
 No generic backend registry or additional destination is implemented until one is needed.
 
