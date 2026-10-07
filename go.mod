@@ -2,6 +2,8 @@ module github.com/tedilabs/terraform-provider-telemetry
 
 go 1.25.0
 
+toolchain go1.25.14
+
 require (
 	github.com/hashicorp/terraform-json v0.27.2
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
