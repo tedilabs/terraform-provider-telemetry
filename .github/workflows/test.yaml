@@ -84,6 +84,7 @@ jobs:
 
     env:
       MISE_TERRAFORM_VERSION: ${{ matrix.terraform }}
+      TF_ACC: "1"
 
     steps:
     - name: Checkout
@@ -115,18 +116,13 @@ jobs:
         restore-keys: |
           go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-
 
-    - name: Set up Python
-      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-      with:
-        python-version: '3.x'
-
     - name: Check Go formatting
       run: test -z "$(gofmt -l .)"
 
     - name: Check Terraform formatting
       uses: tedilabs/github-actions/.github/actions/terraform.fmt@main
       with:
-        target_dir: examples
+        target_dir: ./
 
-    - name: Exercise plan and apply against a local capture server
-      run: python3 scripts/smoke_test.py
+    - name: Run Terraform provider acceptance tests
+      run: TF_ACC_TERRAFORM_PATH="$(mise which terraform)" go test -race -run '^TestAcc' -count=1 -timeout 10m ./internal/provider
