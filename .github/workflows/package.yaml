@@ -33,10 +33,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Set up Go and Python
+    - name: Set up Go
       uses: tedilabs/github-actions/.github/actions/mise.setup-tools@main
       with:
-        install_args: go python
+        install_args: go
         cache_key: "{{default}}-${{ hashFiles('go.mod') }}"
 
     - name: Resolve Go cache paths
@@ -72,4 +72,4 @@ jobs:
         args: release --snapshot --clean --skip=sign,publish
 
     - name: Verify Registry package layout and checksums
-      run: python3 scripts/verify_release.py
+      run: go run ./scripts/verify_release.go
