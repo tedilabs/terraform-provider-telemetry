@@ -1,0 +1,60 @@
+name: Test
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Go / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: go.mod
+    - run: go test -race -timeout 60s ./...
+    - run: go vet ./...
+
+  terraform:
+    name: Terraform / ${{ matrix.terraform }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        terraform: ['1.8.5', '1.15.6']
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: go.mod
+    - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+      with:
+        python-version: '3.x'
+    - name: Set up Terraform
+      uses: tedilabs/github-actions/.github/actions/mise.setup-tools@main
+      with:
+        mise_toml: |
+          [tools]
+          terraform = "${{ matrix.terraform }}"
+        install_args: terraform
+    - name: Check Go formatting
+      run: test -z "$(gofmt -l .)"
+    - name: Check Terraform formatting
+      uses: tedilabs/github-actions/.github/actions/terraform.fmt@main
+      with:
+        target_dir: examples
+    - name: Exercise plan and apply against a local capture server
+      run: python3 scripts/smoke_test.py
