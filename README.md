@@ -223,11 +223,23 @@ provider_installation {
 
 Set `TF_CLI_CONFIG_FILE` to that file when running Terraform. A function-only example using a dev override can run directly without `terraform init`; initialization would still try to resolve a published version. Terraform prints its normal development override warning in this mode.
 
+### Documentation
+
+Install the pinned documentation tool and regenerate the Registry documentation from the repository root:
+
+```sh
+mise install go terraform github:hashicorp/terraform-plugin-docs
+mise exec -- tfplugindocs generate --provider-name telemetry
+mise exec -- tfplugindocs validate --provider-name telemetry
+```
+
+Edit function definitions for signatures and argument descriptions, `examples/functions/<name>/function.tf` for examples, and `templates/` for detailed behavior and usage guidance. Files under `docs/` are generated; commit them with their source changes. Dynamic options still require explicit documentation in the templates and function definition. CI regenerates and validates the documentation and rejects uncommitted differences or new generated files.
+
 ## Adding a destination
 
 1. Add `capture_<destination>` in `internal/provider`, retaining three required positional arguments and the optional cache/deduplication settings in `options`. Define that destination's `connection` object, reuse `optionsParameter()`, `collectProperties()`, and the process deduplicator with a distinct destination/connection scope, and always return `true`.
 2. Add the destination's sender in `internal/telemetry`; keep transport logic separate from the collectors in `collect.go`.
-3. Register the constructor in `TelemetryProvider.Functions`, and add function docs, sender tests, and a local-only Terraform acceptance scenario.
+3. Register the constructor in `TelemetryProvider.Functions`, and add documentation templates/examples, sender tests, and a local-only Terraform acceptance scenario. Regenerate the Registry documentation.
 
 No generic backend registry or additional destination is implemented until one is needed.
 

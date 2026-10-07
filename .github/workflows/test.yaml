@@ -131,3 +131,48 @@ jobs:
 
     - name: Run Terraform provider acceptance tests
       run: TF_ACC_TERRAFORM_PATH="$(mise which terraform)" go test -race -run '^TestAcc' -count=1 -timeout 10m ./internal/provider
+
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up Go, Terraform, and tfplugindocs
+      uses: tedilabs/github-actions/.github/actions/mise.setup-tools@main
+      with:
+        install_args: go terraform github:hashicorp/terraform-plugin-docs
+        cache_key: "{{default}}-${{ hashFiles('go.mod', 'mise.toml') }}"
+
+    - name: Resolve Go cache paths
+      id: go-cache
+      shell: bash
+      run: |
+        {
+          echo "modules=$(go env GOMODCACHE)"
+          echo "build=$(go env GOCACHE)"
+          echo "version=$(go env GOVERSION)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Cache Go modules and build outputs
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.go-cache.outputs.modules }}
+          ${{ steps.go-cache.outputs.build }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-${{ hashFiles('go.mod', 'go.sum') }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-
+
+    - name: Generate provider documentation
+      run: tfplugindocs generate --provider-name telemetry
+
+    - name: Validate provider documentation
+      run: tfplugindocs validate --provider-name telemetry
+
+    - name: Check generated documentation is committed
+      run: |
+        git diff --exit-code -- docs
+        test -z "$(git ls-files --others --exclude-standard -- docs)"
