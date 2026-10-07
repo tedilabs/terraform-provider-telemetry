@@ -28,8 +28,13 @@ checksum:
 
 signs:
 - artifacts: checksum
+  stdin: '{{ .Env.GPG_PASSPHRASE }}'
   args:
   - --batch
+  - --pinentry-mode
+  - loopback
+  - --passphrase-fd
+  - "0"
   - --local-user
   - '{{ .Env.GPG_FINGERPRINT }}'
   - --output
