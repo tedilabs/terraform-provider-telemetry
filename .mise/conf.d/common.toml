@@ -1,0 +1,5 @@
+# Managed by Terraform in tedilabs/github. Override a version or add tools in `mise.toml`, which takes precedence.
+
+[tools]
+go = "1.27.1"
+terraform = "1.16.3"
