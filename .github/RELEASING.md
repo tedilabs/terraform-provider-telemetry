@@ -110,6 +110,6 @@ goreleaser release --snapshot --clean --skip=sign,publish
 go run ./scripts/verify_release.go
 ```
 
-Use the Go `toolchain` declared in `go.mod` and GoReleaser 2.17.0, matching CI. Run the commands with mise activated, and set `GOTOOLCHAIN=local` to preserve the selected Go version. Snapshot checks require neither signing secrets nor Registry access; they do not validate the production signing key or perform registration.
+Use the Go `toolchain` declared in `go.mod` and GoReleaser 2.17.0, matching CI. Package builds, native tests, and release validation all use that toolchain. The package and release workflows run pinned govulncheck before publication. Run the commands with mise activated, and set `GOTOOLCHAIN=local` to preserve the selected Go version. Snapshot checks require neither signing secrets nor Registry access; they do not validate the production signing key or perform registration.
 
 References: [HashiCorp publishing requirements](https://developer.hashicorp.com/terraform/registry/providers/publishing), [provider documentation format](https://developer.hashicorp.com/terraform/registry/providers/docs), [GoReleaser configuration](https://goreleaser.com/customization/).

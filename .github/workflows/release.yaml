@@ -69,6 +69,9 @@ jobs:
     - name: Check Go with vet
       run: go vet ./...
 
+    - name: Check release dependencies for known vulnerabilities
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
     - name: Run Terraform provider acceptance tests
       env:
         TF_ACC: "1"

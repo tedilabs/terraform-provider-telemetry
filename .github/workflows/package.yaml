@@ -71,5 +71,8 @@ jobs:
         version: v2.17.0
         args: release --snapshot --clean --skip=sign,publish
 
+    - name: Check release dependencies for known vulnerabilities
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
     - name: Verify Registry package layout and checksums
       run: go run ./scripts/verify_release.go
