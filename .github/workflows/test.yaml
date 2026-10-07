@@ -119,10 +119,15 @@ jobs:
     - name: Check Go formatting
       run: test -z "$(gofmt -l .)"
 
-    - name: Check Terraform formatting
+    - name: Check Terraform example formatting
       uses: tedilabs/github-actions/.github/actions/terraform.fmt@main
       with:
-        target_dir: ./
+        target_dir: ./examples
+
+    - name: Check Terraform acceptance test formatting
+      uses: tedilabs/github-actions/.github/actions/terraform.fmt@main
+      with:
+        target_dir: ./internal/provider/testdata/acceptance
 
     - name: Run Terraform provider acceptance tests
       run: TF_ACC_TERRAFORM_PATH="$(mise which terraform)" go test -race -run '^TestAcc' -count=1 -timeout 10m ./internal/provider
