@@ -1,0 +1,91 @@
+name: Release
+
+
+on:
+  push:
+    tags:
+    - 'v*'
+
+
+permissions:
+  contents: read
+
+
+env:
+  GOTOOLCHAIN: local
+
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+
+    - name: Require a release commit on main
+      run: git merge-base --is-ancestor HEAD origin/main
+
+    - name: Set up Go and Terraform
+      uses: tedilabs/github-actions/.github/actions/mise.setup-tools@main
+      with:
+        install_args: go terraform
+        cache_key: "{{default}}-${{ hashFiles('go.mod') }}"
+
+    - name: Resolve Go cache paths
+      id: go-cache
+      shell: bash
+      run: |
+        {
+          echo "modules=$(go env GOMODCACHE)"
+          echo "build=$(go env GOCACHE)"
+          echo "version=$(go env GOVERSION)"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Cache Go modules and build outputs
+      uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: |
+          ${{ steps.go-cache.outputs.modules }}
+          ${{ steps.go-cache.outputs.build }}
+        key: go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-${{ hashFiles('go.mod', 'go.sum') }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go-cache.outputs.version }}-
+
+    - name: Run Go tests
+      run: go test -race -timeout 60s ./...
+
+    - name: Check Go with vet
+      run: go vet ./...
+
+    - name: Run Terraform provider acceptance tests
+      env:
+        TF_ACC: "1"
+      run: TF_ACC_TERRAFORM_PATH="$(mise which terraform)" go test -race -run '^TestAcc' -count=1 -timeout 10m ./internal/provider
+
+    - name: Import release signing key
+      id: gpg
+      uses: crazy-max/ghaction-import-gpg@2dc316deee8e90f13e1a351ab510b4d5bc0c82cd # v7.0.0
+      with:
+        gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+        passphrase: ${{ secrets.PASSPHRASE }}
+
+    - name: Build, sign, and publish
+      uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+      with:
+        version: v2.17.0
+        args: release --clean
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GPG_FINGERPRINT: ${{ steps.gpg.outputs.fingerprint }}

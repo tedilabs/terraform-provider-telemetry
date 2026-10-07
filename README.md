@@ -234,3 +234,7 @@ No generic backend registry or additional destination is implemented until one i
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).
+
+## Publishing
+
+See the [release and Registry registration guide](.github/RELEASING.md) for signing-key setup, the first release, public Registry registration, and installation verification. Release packages support Linux, macOS, and Windows on amd64 and arm64.
