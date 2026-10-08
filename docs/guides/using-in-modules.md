@@ -1,0 +1,134 @@
+---
+page_title: "Using Telemetry in Modules"
+subcategory: ""
+description: |-
+  Add opt-in usage telemetry to a Terraform module.
+---
+
+# Using Telemetry in Modules
+
+Module authors can use this provider to learn how their modules are used,
+for example which versions are in use and on which platforms.
+This guide shows how to add telemetry to a module so that it stays opt-in,
+does not affect the resources of the module, and sends one event per module instead of one per instance.
+
+## Example
+
+The following file adds telemetry to a module. Users enable it with the `telemetry_enabled` variable.
+
+```terraform
+terraform {
+  required_providers {
+    telemetry = {
+      source  = "tedilabs/telemetry"
+      version = ">= 0.1.1"
+    }
+  }
+  # Provider functions require Terraform 1.8 and later.
+  required_version = ">= 1.8.0"
+}
+
+variable "telemetry_enabled" {
+  description = "Whether to send usage telemetry of this module to its maintainers."
+  type        = bool
+  default     = false
+  nullable    = false
+}
+
+locals {
+  telemetry = {
+    connection = {
+      host          = "https://us.i.posthog.com"
+      project_token = "<project-token>"
+    }
+    # Update together with each release of the module.
+    module  = "tedilabs/example/aws"
+    version = "1.2.3"
+  }
+}
+
+check "telemetry" {
+  assert {
+    condition = provider::telemetry::capture_posthog(
+      # A null connection disables the call.
+      var.telemetry_enabled ? local.telemetry.connection : null,
+      {
+        machine        = true
+        network        = false
+        git            = false
+        github         = false
+        github_actions = false
+        toolchain      = true
+      },
+      {
+        module  = local.telemetry.module
+        version = local.telemetry.version
+      }
+    )
+    error_message = "Telemetry invocation failed."
+  }
+}
+```
+
+## Consider the impact on module users
+
+Adding telemetry changes the requirements of the module for every user, even while telemetry is disabled:
+
+* `terraform init` installs this provider, and records it in the dependency lock file.
+* The module requires Terraform 1.8 or later, because earlier versions do not support provider-defined functions.
+
+When telemetry is enabled, each call runs commands and sends network requests in the environment of the user,
+and can take up to five seconds when the destination is slow or unreachable.
+
+Document in the README of the module that it can send telemetry, what it collects, and how to enable it.
+
+## Keep telemetry opt-in
+
+Add a variable that enables telemetry, and default it to `false`.
+To disable the call, pass `null` instead of the connection, as in the example.
+
+~> **Note:** Do not wrap the call in a conditional expression such as `var.telemetry_enabled ? provider::telemetry::capture_posthog(...) : true`. Terraform evaluates both results of a conditional expression, so the function still runs and sends the event.
+
+Call the function in a `check` block. The function always returns `true`, so the check never fails,
+and the call does not affect the resources of the module.
+
+## Identify the module
+
+Pass the name and the version of the module in `extra_data`.
+Terraform has no expression that returns the version of the current module,
+so update the version in the module together with each release.
+
+## Send one event per module
+
+By default, a call is skipped when the same provider process has already sent an event with identical properties.
+Instances of the module that pass the same `extra_data` therefore send one event per provider process,
+however many instances `count` or `for_each` creates.
+
+If `extra_data` contains values that differ between instances, every instance sends its own event.
+To send one event per module version anyway, select the identifying properties with `deduplication_keys`,
+for example `["module", "version"]`. Only the first event is sent, so the other instances' values are lost.
+
+Terraform can use a separate provider process for each phase of a command,
+so a command can still send more than one event, for example one when planning and one when applying.
+See the [Caching and Deduplication](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/caching-and-deduplication) guide for details.
+
+## Choose collectors
+
+Enable only the collectors that answer your questions.
+For example, `machine` and `toolchain` show the platforms and tool versions in use,
+without data that identifies people or machines.
+The `network`, `git`, `github`, and `github_actions` collectors include identifying data;
+see the [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide.
+
+Avoid sending values that users pass to the module, such as names or tags, in `extra_data`.
+
+## Connection settings
+
+When the module sends telemetry to its author, the connection is hard-coded in the module,
+and every user of the module can read the project token.
+PostHog uses the project token for its public endpoints, such as event capture,
+while reading data requires a personal API key; see the [PostHog API documentation](https://posthog.com/docs/api).
+Never put a personal API key in a module.
+
+To let users send telemetry to their own PostHog project instead,
+accept the connection as a variable, as in the example on the provider overview page.
