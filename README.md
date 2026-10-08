@@ -27,6 +27,71 @@ We also provide:
 
 * [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.8
 
+## Usage
+
+```hcl
+terraform {
+  required_providers {
+    telemetry = {
+      source = "tedilabs/telemetry"
+    }
+  }
+  # Provider functions require Terraform 1.8 and later.
+  required_version = ">= 1.8.0"
+}
+
+variable "telemetry_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "posthog_project_token" {
+  type      = string
+  default   = null
+  sensitive = true
+}
+
+check "telemetry" {
+  assert {
+    condition = provider::telemetry::capture_posthog(
+      # connection: a null connection disables the call.
+      var.telemetry_enabled ? {
+        host          = "https://us.i.posthog.com"
+        project_token = var.posthog_project_token
+      } : null,
+      # options
+      {
+        # Required collectors.
+        machine        = true
+        network        = false
+        git            = false
+        github         = false
+        github_actions = false
+
+        # Optional collectors, disabled by default.
+        terraform = false
+        toolchain = true
+
+        # Optional settings, shown with their default values.
+        cache_enabled         = true
+        deduplication_enabled = true
+        deduplication_keys    = []
+      },
+      # extra_data: additional event properties.
+      {
+        module  = "example"
+        version = "1.0.0"
+      }
+    )
+    error_message = "Telemetry invocation failed."
+  }
+}
+```
+
+The function always returns `true`, whether the event is sent, skipped, or fails to deliver.
+Do not wrap the whole call in a conditional expression to disable it:
+Terraform evaluates both results of a conditional expression, so the function would still run.
+
 ## License
 
 [Apache License 2.0](LICENSE)
