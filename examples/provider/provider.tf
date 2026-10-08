@@ -17,19 +17,22 @@ variable "telemetry_enabled" {
 }
 
 variable "posthog_connection" {
-  description = "PostHog ingestion host and project token."
+  description = "PostHog ingestion host and project token. Required when telemetry is enabled."
   type = object({
     host          = string
     project_token = string
   })
+  default   = null
   sensitive = true
 }
 
 # A check block evaluates the function without affecting any resource.
 check "telemetry" {
   assert {
-    condition = var.telemetry_enabled ? provider::telemetry::capture_posthog(
-      var.posthog_connection,
+    # A null connection disables the call. Wrapping the call in a conditional
+    # expression would not, because Terraform evaluates both of its results.
+    condition = provider::telemetry::capture_posthog(
+      var.telemetry_enabled ? var.posthog_connection : null,
       {
         machine        = true
         network        = false
@@ -40,7 +43,7 @@ check "telemetry" {
       {
         module = "example"
       }
-    ) : true
+    )
     error_message = "Telemetry invocation failed."
   }
 }

@@ -39,6 +39,9 @@ All arguments are positional and required.
 - `project_token` (String) PostHog project token, sent as the `api_key` of the event.
   Do not use a personal API key. Store the token in a `sensitive` variable.
 
+To disable a call, pass `null` instead of the `connection` object, for example `var.enabled ? var.connection : null`.
+Do not wrap the whole call in a conditional expression: Terraform evaluates both of its results, so the function still runs.
+
 <a id="nestedobjatt--options"></a>
 ### Nested Schema for `options`
 
