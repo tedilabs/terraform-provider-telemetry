@@ -26,18 +26,18 @@ func (f *CapturePostHogFunction) Metadata(_ context.Context, _ function.Metadata
 
 func (f *CapturePostHogFunction) Definition(_ context.Context, _ function.DefinitionRequest, resp *function.DefinitionResponse) {
 	resp.Definition = function.Definition{
-		Summary:     "Send best-effort telemetry to PostHog and always return true.",
-		Description: "Collect enabled metadata and send terraform_capture. Collection and delivery failures are ignored. This function intentionally performs network side effects.",
+		Summary:             "Send best-effort telemetry to PostHog and always return true.",
+		MarkdownDescription: "Collects the enabled metadata about the environment running Terraform and attempts to send it to [PostHog](https://posthog.com/) as a `terraform_capture` event. The function always returns `true`, whether the event is sent, skipped, deduplicated, or fails to deliver.",
 		Parameters: []function.Parameter{
 			function.ObjectParameter{
 				Name: "connection", AllowNullValue: true, AllowUnknownValues: true,
-				Description:    "PostHog ingestion host and project token.",
-				AttributeTypes: map[string]attr.Type{"host": types.StringType, "project_token": types.StringType},
+				MarkdownDescription: "PostHog ingestion base URL `host` (for example, `https://us.i.posthog.com`) and `project_token`. A null value skips the capture.",
+				AttributeTypes:      map[string]attr.Type{"host": types.StringType, "project_token": types.StringType},
 			},
 			optionsParameter(),
 			function.DynamicParameter{
 				Name: "extra_data", AllowNullValue: true, AllowUnknownValues: true,
-				Description: "Additional key/value data as an object or map, deep-merged into event properties with caller values taking precedence. Objects merge recursively; lists, scalars, and null replace existing values. Pass {} when empty.",
+				MarkdownDescription: "Additional event properties as an object or map, deep-merged over the collected metadata. Use `{}` when there is nothing to add. A null value is treated as `{}`.",
 			},
 		},
 		Return: function.BoolReturn{},
