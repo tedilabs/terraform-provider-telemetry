@@ -15,11 +15,6 @@ description: |-
 
 {{ tffile .ExampleFile }}
 
-<a id="example-deduplication"></a>
-### Deduplicate module instances
-
-{{ tffile "examples/functions/capture_posthog/deduplication.tf" }}
-
 ## Signature
 
 {{ .FunctionSignatureMarkdown }}
@@ -137,7 +132,7 @@ See the [Caching and Deduplication](https://registry.terraform.io/providers/tedi
 ## Event Deduplication
 
 By default, a call is skipped when the same provider process has already sent an event with identical properties.
-Set `deduplication_keys` to compare only the selected properties, as in the [example](#example-deduplication),
+Set `deduplication_keys` to compare only the selected properties,
 or set `deduplication_enabled = false` to send every event.
 See the [Caching and Deduplication](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/caching-and-deduplication#event-deduplication) guide for details.
 

@@ -11,7 +11,9 @@ The provider manages no resources or data sources, and has no configuration opti
 ## Documentation, questions and discussions
 
 Official documentation on how to use this provider can be found on the
-[Terraform Registry](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs).
+[Terraform Registry](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs),
+including examples, the collected metadata, the limitations of side-effecting functions,
+and a guide for adding telemetry to modules.
 For questions, bug reports, or feature requests, please open an
 [issue](https://github.com/tedilabs/terraform-provider-telemetry/issues).
 
@@ -34,23 +36,61 @@ terraform {
       source = "tedilabs/telemetry"
     }
   }
+  # Provider functions require Terraform 1.8 and later.
   required_version = ">= 1.8.0"
+}
+
+variable "telemetry_enabled" {
+  type    = bool
+  default = false
+}
+
+variable "posthog_project_token" {
+  type      = string
+  default   = null
+  sensitive = true
 }
 
 check "telemetry" {
   assert {
     condition = provider::telemetry::capture_posthog(
-      { host = "https://us.i.posthog.com", project_token = var.posthog_project_token },
-      { machine = true, network = false, git = false, github = false, github_actions = false },
-      { module = "example" }
+      # connection: a null connection disables the call.
+      var.telemetry_enabled ? {
+        host          = "https://us.i.posthog.com"
+        project_token = var.posthog_project_token
+      } : null,
+      # options
+      {
+        # Required collectors.
+        machine        = true
+        network        = false
+        git            = false
+        github         = false
+        github_actions = false
+
+        # Optional collectors, disabled by default.
+        terraform = false
+        toolchain = true
+
+        # Optional settings, shown with their default values.
+        cache_enabled         = true
+        deduplication_enabled = true
+        deduplication_keys    = []
+      },
+      # extra_data: additional event properties.
+      {
+        module  = "example"
+        version = "1.0.0"
+      }
     )
     error_message = "Telemetry invocation failed."
   }
 }
 ```
 
-Read the [provider documentation](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs)
-for the collected metadata, the limitations of side-effecting functions, and privacy considerations.
+The function always returns `true`, whether the event is sent, skipped, or fails to deliver.
+Do not wrap the whole call in a conditional expression to disable it:
+Terraform evaluates both results of a conditional expression, so the function would still run.
 
 ## License
 
