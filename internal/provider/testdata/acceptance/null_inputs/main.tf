@@ -18,20 +18,22 @@ locals {
     git            = false
     github         = false
     github_actions = false
+    terraform      = false
+    toolchain      = false
   }
 }
 
 locals {
   results = {
-    null_connection      = provider::telemetry::capture_posthog(null, local.options, {})
-    null_host            = provider::telemetry::capture_posthog(merge(local.connection, { host = null }), local.options, {})
-    null_project_token   = provider::telemetry::capture_posthog(merge(local.connection, { project_token = null }), local.options, {})
-    null_options         = provider::telemetry::capture_posthog(local.connection, null, {})
-    null_required_option = provider::telemetry::capture_posthog(local.connection, merge(local.options, { machine = null }), {})
-    null_optional_option = provider::telemetry::capture_posthog(local.connection, merge(local.options, { cache_enabled = null }), {})
-    null_key             = provider::telemetry::capture_posthog(local.connection, merge(local.options, { deduplication_keys = [null] }), {})
-    null_extra_data      = provider::telemetry::capture_posthog(local.connection, local.options, null)
-    known                = provider::telemetry::capture_posthog(local.connection, local.options, { test_case = "known", value = "known" })
+    null_connection       = provider::telemetry::capture_posthog(null, local.options, {})
+    null_host             = provider::telemetry::capture_posthog(merge(local.connection, { host = null }), local.options, {})
+    null_project_token    = provider::telemetry::capture_posthog(merge(local.connection, { project_token = null }), local.options, {})
+    null_options          = provider::telemetry::capture_posthog(local.connection, null, {})
+    null_collector_option = provider::telemetry::capture_posthog(local.connection, merge(local.options, { machine = null }), {})
+    null_setting_option   = provider::telemetry::capture_posthog(local.connection, merge(local.options, { cache_enabled = null }), {})
+    null_key              = provider::telemetry::capture_posthog(local.connection, merge(local.options, { deduplication_keys = [null] }), {})
+    null_extra_data       = provider::telemetry::capture_posthog(local.connection, local.options, null)
+    known                 = provider::telemetry::capture_posthog(local.connection, local.options, { test_case = "known", value = "known" })
     nested_nulls = provider::telemetry::capture_posthog(local.connection, local.options, {
       test_case = "nested_nulls"
       object    = { value = null }

@@ -1,7 +1,7 @@
 # Terraform Provider: Telemetry
 
 The Telemetry provider offers best-effort telemetry functions for Terraform configurations and modules.
-Each function collects opt-in metadata about the environment running Terraform, such as the machine,
+Each function collects metadata about the environment running Terraform, such as the machine,
 the Git repository, or the GitHub Actions run, and attempts to send it as an event to a telemetry destination.
 The provider currently offers the [`capture_posthog`](docs/functions/capture_posthog.md) function
 for [PostHog](https://posthog.com/).
@@ -59,20 +59,18 @@ check "telemetry" {
         host          = "https://us.i.posthog.com"
         project_token = var.posthog_project_token
       } : null,
-      # options
+      # options: every attribute is optional, shown here with its default value.
       {
-        # Required collectors.
+        # Metadata collectors.
         machine        = true
-        network        = false
-        git            = false
+        network        = true
+        git            = true
         github         = false
-        github_actions = false
+        github_actions = true
+        terraform      = true
+        toolchain      = true
 
-        # Optional collectors, disabled by default.
-        terraform = false
-        toolchain = true
-
-        # Optional settings, shown with their default values.
+        # Caching and deduplication.
         cache_enabled         = true
         deduplication_enabled = true
         deduplication_keys    = []

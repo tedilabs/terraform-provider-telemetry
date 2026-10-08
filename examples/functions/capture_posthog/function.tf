@@ -22,15 +22,10 @@ check "telemetry" {
         host          = "https://us.i.posthog.com"
         project_token = var.posthog_project_token
       },
-      # options
+      # options: omitted attributes use their defaults.
       {
-        machine        = true
-        network        = false
-        git            = true
-        github         = false
-        github_actions = true
-        terraform      = true
-        toolchain      = true
+        network = false
+        github  = true
       },
       # extra_data
       {

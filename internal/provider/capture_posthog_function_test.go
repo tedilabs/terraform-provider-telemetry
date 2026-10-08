@@ -25,6 +25,7 @@ var connectionTypes = map[string]attr.Type{"host": types.StringType, "project_to
 var optionTypes = map[string]attr.Type{
 	"machine": types.BoolType, "network": types.BoolType, "git": types.BoolType,
 	"github": types.BoolType, "github_actions": types.BoolType,
+	"terraform": types.BoolType, "toolchain": types.BoolType,
 }
 
 func optionsWithCache(options types.Object, flag attr.Value) types.Dynamic {
@@ -280,26 +281,33 @@ func TestCollectionOptionsValidation(t *testing.T) {
 	for _, asMap := range []bool{false, true} {
 		attributes := disabledOptions().Attributes()
 		attributes["git"] = types.BoolValue(true)
-		attributes["cache_enabled"] = types.BoolValue(false)
 		var value types.Dynamic
 		if asMap {
+			attributes["cache_enabled"] = types.BoolValue(false)
 			value = types.DynamicValue(types.MapValueMust(types.BoolType, attributes))
 		} else {
-			value = optionsWithCache(types.ObjectValueMust(optionTypes, map[string]attr.Value{
-				"machine": types.BoolValue(false), "network": types.BoolValue(false), "git": types.BoolValue(true),
-				"github": types.BoolValue(false), "github_actions": types.BoolValue(false),
-			}), types.BoolValue(false))
+			value = optionsWithCache(types.ObjectValueMust(optionTypes, attributes), types.BoolValue(false))
 		}
 		opts, ok := collectionOptions(value)
-		if !ok || opts.cacheEnabled || !opts.collect.Git || opts.collect.Machine || opts.collect.Network || opts.collect.GitHub || opts.collect.GitHubActions {
+		if !ok || opts.cacheEnabled || opts.collect != (telemetry.Options{Git: true}) {
 			t.Fatalf("invalid parsed options: %+v, cache=%v, ok=%v", opts, opts.cacheEnabled, ok)
+		}
+	}
+	for name := range optionTypes {
+		for _, invalid := range []attr.Value{types.BoolNull(), types.BoolUnknown(), types.StringValue("true")} {
+			if _, ok := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: invalid})); ok {
+				t.Fatalf("invalid %s accepted", name)
+			}
 		}
 	}
 	for _, value := range []types.Dynamic{
 		types.DynamicNull(),
 		types.DynamicUnknown(),
 		types.DynamicValue(types.StringValue("invalid")),
-		types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{})),
+		types.DynamicValue(types.ObjectNull(optionTypes)),
+		types.DynamicValue(types.ObjectUnknown(optionTypes)),
+		types.DynamicValue(types.MapNull(types.BoolType)),
+		types.DynamicValue(types.MapUnknown(types.BoolType)),
 		types.DynamicValue(types.MapValueMust(types.StringType, map[string]attr.Value{"machine": types.StringValue("true")})),
 	} {
 		if _, ok := collectionOptions(value); ok {
@@ -308,7 +316,29 @@ func TestCollectionOptionsValidation(t *testing.T) {
 	}
 }
 
-func TestOptionalTerraformAndToolchainCategories(t *testing.T) {
+func TestCollectionOptionDefaults(t *testing.T) {
+	want := telemetry.Options{Machine: true, Network: true, Git: true, GitHubActions: true, Terraform: true, Toolchain: true}
+	for _, value := range []types.Dynamic{
+		types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{})),
+		types.DynamicValue(types.MapValueMust(types.BoolType, map[string]attr.Value{})),
+	} {
+		opts, ok := collectionOptions(value)
+		if !ok || opts.collect != want || !opts.cacheEnabled || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 0 {
+			t.Fatalf("unexpected defaults for %v: %+v, ok=%v", value, opts, ok)
+		}
+	}
+	// Each attribute overrides only its own default.
+	opts, ok := collectionOptions(types.DynamicValue(types.ObjectValueMust(
+		map[string]attr.Type{"network": types.BoolType, "github": types.BoolType},
+		map[string]attr.Value{"network": types.BoolValue(false), "github": types.BoolValue(true)},
+	)))
+	want.Network, want.GitHub = false, true
+	if !ok || opts.collect != want {
+		t.Fatalf("unexpected overridden defaults: %+v, ok=%v", opts, ok)
+	}
+}
+
+func TestTerraformAndToolchainCategories(t *testing.T) {
 	original := processCollector
 	processCollector = telemetry.NewCollector()
 	t.Cleanup(func() { processCollector = original })
@@ -319,17 +349,6 @@ func TestOptionalTerraformAndToolchainCategories(t *testing.T) {
 		return ""
 	}
 	processCollector.Run = func(context.Context, string, ...string) ([]byte, error) { return nil, fmt.Errorf("not installed") }
-	for _, name := range []string{"terraform", "toolchain"} {
-		for _, invalid := range []attr.Value{types.BoolNull(), types.BoolUnknown(), types.StringValue("true")} {
-			if _, ok := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: invalid})); ok {
-				t.Fatalf("invalid %s accepted", name)
-			}
-		}
-	}
-	defaults, ok := collectionOptions(types.DynamicValue(disabledOptions()))
-	if !ok || defaults.collect.Terraform || defaults.collect.Toolchain {
-		t.Fatal("new collectors enabled by default")
-	}
 	options := optionsWithAttributes(disabledOptions(), map[string]attr.Value{
 		"terraform": types.BoolValue(true), "toolchain": types.BoolValue(true), "deduplication_enabled": types.BoolValue(false),
 	})

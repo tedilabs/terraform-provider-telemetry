@@ -7,21 +7,21 @@ description: |-
 
 # Collected Metadata
 
-The `options` argument of each function enables metadata collectors.
+The `options` argument of each function selects metadata collectors.
 Each enabled collector adds a metadata group, named after its option, to the event properties.
 This guide lists the properties of each group and where they come from.
 
-| Option | Source | Identifying properties |
-| --- | --- | --- |
-| [`machine`](#machine) | Operating system and provider binary | None |
-| [`network`](#network) | Operating system and [ipify](https://www.ipify.org/) | `hostname`, `public_ip` |
-| [`git`](#git) | Git repository of the working directory | `remote`, and the repository and branch names |
-| [`github`](#github) | GitHub CLI | `login`, `id`, `name`, `html_url` |
-| [`github_actions`](#github_actions) | GitHub Actions environment variables | `actor`, `actor_id`, `triggering_actor`, and the repository |
-| [`terraform`](#terraform) | Terraform CLI workspace selection | The workspace name |
-| [`toolchain`](#toolchain) | Version commands of tools in `PATH` | None |
+| Option | Default | Source | Identifying properties |
+| --- | --- | --- | --- |
+| [`machine`](#machine) | `true` | Operating system and provider binary | None |
+| [`network`](#network) | `true` | Operating system and [ipify](https://www.ipify.org/) | `hostname`, `public_ip` |
+| [`git`](#git) | `true` | Git repository of the working directory | `remote`, and the repository and branch names |
+| [`github`](#github) | `false` | GitHub CLI | `login`, `id`, `name`, `html_url` |
+| [`github_actions`](#github_actions) | `true` | GitHub Actions environment variables | `actor`, `actor_id`, `triggering_actor`, and the repository |
+| [`terraform`](#terraform) | `true` | Terraform CLI workspace selection | The workspace name |
+| [`toolchain`](#toolchain) | `true` | Version commands of tools in `PATH` | None |
 
-Enable only the collectors you need.
+Set a collector to `false` in `options` to disable it, and disable the collectors you do not need.
 Metadata describes the environment running Terraform: with remote execution, such as HCP Terraform
 or a CI/CD pipeline, it describes the remote runner, not the workstation of the person who started the run.
 

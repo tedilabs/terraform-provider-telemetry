@@ -7,7 +7,7 @@ description: |-
 # Telemetry Provider
 
 The Telemetry provider offers best-effort telemetry functions for Terraform configurations and modules.
-Each function collects opt-in metadata about the environment running Terraform, such as the machine,
+Each function collects metadata about the environment running Terraform, such as the machine,
 the Git repository, or the GitHub Actions run, and attempts to send it as an event to a telemetry destination.
 [PostHog](https://posthog.com/) is currently the only destination.
 
@@ -47,9 +47,9 @@ Use these functions only for best-effort usage telemetry, never for auditing or 
 
 ### Collected data and privacy
 
-!> **Warning:** Some metadata identifies people or machines, such as the hostname, the public IP address, the Git remote URL, and the GitHub login. Enable only the collectors you need. The [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide lists every property and its source.
+!> **Warning:** By default, the functions collect metadata that identifies people or machines, such as the hostname, the public IP address, and the Git remote URL. Disable the collectors you do not need. The [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide lists every property and its source.
 
-Every metadata collector is disabled unless a function call enables it.
+Every metadata collector except `github` is enabled by default. Set a collector to `false` in `options` to disable it.
 To add telemetry to a module that others use, follow the
 [Using Telemetry in Modules](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/using-in-modules) guide.
 

@@ -22,6 +22,8 @@ check "capture" {
         git                   = false
         github                = false
         github_actions        = false
+        terraform             = false
+        toolchain             = false
         deduplication_enabled = var.deduplication_enabled
         deduplication_keys    = var.deduplication_keys
       },

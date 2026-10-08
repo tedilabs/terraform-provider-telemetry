@@ -33,13 +33,12 @@ check "telemetry" {
     condition = provider::telemetry::capture_posthog(
       # A null connection disables the call.
       var.telemetry_enabled ? local.telemetry.connection : null,
+      # Keep only the machine and toolchain metadata.
       {
-        machine        = true
         network        = false
         git            = false
-        github         = false
         github_actions = false
-        toolchain      = true
+        terraform      = false
       },
       {
         module  = local.telemetry.module

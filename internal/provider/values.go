@@ -28,15 +28,26 @@ type captureOptions struct {
 // Shared by capture functions for all telemetry destinations.
 func optionsParameter() function.DynamicParameter {
 	// A dynamic object preserves omitted optional attributes. ObjectParameter
-	// requires every declared attribute and cannot express this default.
+	// requires every declared attribute and cannot express these defaults.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		MarkdownDescription: "Object or map that enables metadata collectors and configures caching and deduplication. `machine`, `network`, `git`, `github`, and `github_actions` are required booleans; `terraform`, `toolchain`, `cache_enabled`, `deduplication_enabled`, and `deduplication_keys` are optional. A null value skips the capture.",
+		MarkdownDescription: "Object or map that selects metadata collectors and configures caching and deduplication. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` defaults to `[]`. A null value skips the capture.",
 	}
 }
 
 func collectionOptions(options types.Dynamic) (captureOptions, bool) {
-	opts := captureOptions{cacheEnabled: true, deduplicationEnabled: true}
+	// Defaults for omitted attributes. GitHub requires an authenticated CLI and
+	// identifies a person, so it is the only collector disabled by default.
+	opts := captureOptions{
+		collect: telemetry.Options{
+			Machine: true, Network: true, Git: true, GitHub: false, GitHubActions: true, Terraform: true, Toolchain: true,
+		},
+		cacheEnabled: true, deduplicationEnabled: true,
+	}
+	// A typed null or unknown object has no attributes and must not fall back to the defaults.
+	if options.IsUnderlyingValueNull() || options.IsUnderlyingValueUnknown() {
+		return opts, false
+	}
 	var attributes map[string]attr.Value
 	switch value := options.UnderlyingValue().(type) {
 	case types.Object:
@@ -49,14 +60,6 @@ func collectionOptions(options types.Dynamic) (captureOptions, bool) {
 	for key, target := range map[string]*bool{
 		"machine": &opts.collect.Machine, "network": &opts.collect.Network, "git": &opts.collect.Git,
 		"github": &opts.collect.GitHub, "github_actions": &opts.collect.GitHubActions,
-	} {
-		value, ok := attributes[key].(types.Bool)
-		if !ok || value.IsNull() || value.IsUnknown() {
-			return opts, false
-		}
-		*target = value.ValueBool()
-	}
-	for key, target := range map[string]*bool{
 		"terraform": &opts.collect.Terraform, "toolchain": &opts.collect.Toolchain,
 		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
 	} {

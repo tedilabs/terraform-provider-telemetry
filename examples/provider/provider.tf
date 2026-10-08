@@ -33,12 +33,9 @@ check "telemetry" {
     # expression would not, because Terraform evaluates both of its results.
     condition = provider::telemetry::capture_posthog(
       var.telemetry_enabled ? var.posthog_connection : null,
+      # Every option is optional. Keep the default collectors except network.
       {
-        machine        = true
-        network        = false
-        git            = false
-        github         = false
-        github_actions = false
+        network = false
       },
       {
         module = "example"
