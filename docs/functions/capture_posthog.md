@@ -123,17 +123,17 @@ All arguments are positional and required.
 
 Required:
 
-- `machine` (Boolean) Whether to collect [`machine`](#metadata-machine) metadata.
-- `network` (Boolean) Whether to collect [`network`](#metadata-network) metadata,
+- `machine` (Boolean) Whether to collect [`machine`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#machine) metadata.
+- `network` (Boolean) Whether to collect [`network`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#network) metadata,
   which looks up the public IP address with an external service.
-- `git` (Boolean) Whether to collect [`git`](#metadata-git) metadata.
-- `github` (Boolean) Whether to collect [`github`](#metadata-github) metadata.
-- `github_actions` (Boolean) Whether to collect [`github_actions`](#metadata-github-actions) metadata.
+- `git` (Boolean) Whether to collect [`git`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#git) metadata.
+- `github` (Boolean) Whether to collect [`github`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#github) metadata.
+- `github_actions` (Boolean) Whether to collect [`github_actions`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#github_actions) metadata.
 
 Optional:
 
-- `terraform` (Boolean) Whether to collect [`terraform`](#metadata-terraform) metadata. Defaults to `false`.
-- `toolchain` (Boolean) Whether to collect [`toolchain`](#metadata-toolchain) metadata. Defaults to `false`.
+- `terraform` (Boolean) Whether to collect [`terraform`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#terraform) metadata. Defaults to `false`.
+- `toolchain` (Boolean) Whether to collect [`toolchain`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#toolchain) metadata. Defaults to `false`.
 - `cache_enabled` (Boolean) Whether to reuse metadata already collected by the same provider process.
   See [Collection Cache](#collection-cache). Defaults to `true`.
 - `deduplication_enabled` (Boolean) Whether to skip events that duplicate an event already sent by the same provider process.
@@ -185,114 +185,20 @@ The attributes of `extra_data` are merged into the event properties, and take pr
 
 ## Collected Metadata
 
-Each enabled collector adds a metadata group to the event properties.
-Values that are not available are omitted, for example when a command is not installed,
-authentication is not configured, or the working directory is not in a Git repository.
-A failing collector does not affect the other collectors.
-Collectors never log in, prompt, or change the configuration of Git or the GitHub CLI.
+Each enabled collector adds a metadata group, named after its option, to the event properties:
 
-<a id="metadata-machine"></a>
-### machine
-
-- `os.name` (String) `macOS`, `Windows`, or the `NAME` of the Linux distribution from `os-release`.
-  Other platforms report the Go operating system name, such as `freebsd`.
-- `os.version` (String) macOS product version, Linux `VERSION_ID`, or Windows `major.minor.build` version.
-- `arch` (String) CPU architecture of the provider binary, such as `amd64` or `arm64`.
-- `cpu_count` (Number) Number of logical CPUs.
-- `memory_size` (Number) Total physical memory in MiB, rounded down. This is not free memory or a container memory limit.
-
-<a id="metadata-network"></a>
-### network
-
-- `hostname` (String) Host name reported by the operating system.
-- `public_ip` (String) Public IPv4 or IPv6 address of the outbound connection, as observed by [ipify](https://www.ipify.org/).
-
-The public IP address is looked up with an unauthenticated HTTPS request to `https://api64.ipify.org`,
-which carries no event properties or credentials. The result reflects NAT, VPNs, and proxies,
-and can differ from the address PostHog observes. Local network interfaces are never enumerated.
-
-<a id="metadata-git"></a>
-### git
-
-Collected from the Git repository that contains the working directory of Terraform.
-
-- `name` (String) Name of the repository root directory.
-- `branch` (String) Current branch.
-- `commit` (String) Current commit SHA.
-- `remote` (String) URL of the `origin` remote, without user information, query, or fragment.
-  Remotes on the local file system are omitted.
-
-<a id="metadata-github"></a>
-### github
-
-Collected with the GitHub CLI (`gh api user`) and its existing authentication.
-Tokens and email addresses are never collected.
-
-- `login` (String) Login of the authenticated user.
-- `id` (Number) ID of the authenticated user.
-- `name` (String) Display name of the authenticated user.
-- `html_url` (String) Profile URL of the authenticated user.
-- `account_type` (String) Account type, such as `User` or `Bot`.
-
-<a id="metadata-github-actions"></a>
-### github_actions
-
-Collected only when the `GITHUB_ACTIONS` environment variable is `true`.
-Each property is read from a default environment variable of GitHub Actions:
-
-| Property | Environment variable |
+| Option | Properties |
 | --- | --- |
-| `workflow` | `GITHUB_WORKFLOW` |
-| `workflow_ref` | `GITHUB_WORKFLOW_REF` |
-| `workflow_sha` | `GITHUB_WORKFLOW_SHA` |
-| `job` | `GITHUB_JOB` |
-| `run_id` | `GITHUB_RUN_ID` |
-| `run_number` | `GITHUB_RUN_NUMBER` |
-| `run_attempt` | `GITHUB_RUN_ATTEMPT` |
-| `repository` | `GITHUB_REPOSITORY` |
-| `repository_id` | `GITHUB_REPOSITORY_ID` |
-| `repository_owner` | `GITHUB_REPOSITORY_OWNER` |
-| `actor` | `GITHUB_ACTOR` |
-| `actor_id` | `GITHUB_ACTOR_ID` |
-| `triggering_actor` | `GITHUB_TRIGGERING_ACTOR` |
-| `event_name` | `GITHUB_EVENT_NAME` |
-| `ref` | `GITHUB_REF` |
-| `sha` | `GITHUB_SHA` |
-| `head_ref` | `GITHUB_HEAD_REF` |
-| `base_ref` | `GITHUB_BASE_REF` |
-| `server_url` | `GITHUB_SERVER_URL` |
-| `runner_os` | `RUNNER_OS` |
-| `runner_arch` | `RUNNER_ARCH` |
-| `runner_environment` | `RUNNER_ENVIRONMENT` |
+| `machine` | `os.name`, `os.version`, `arch`, `cpu_count`, `memory_size` |
+| `network` | `hostname`, `public_ip` |
+| `git` | `name`, `branch`, `commit`, `remote` |
+| `github` | `login`, `id`, `name`, `html_url`, `account_type` |
+| `github_actions` | Workflow, job, run, repository, actor, ref, and runner details, and `run_url` |
+| `terraform` | `workspace`, `workspace_source` |
+| `toolchain` | `terraform`, `opentofu`, `git`, `github_cli`, `telemetry_provider` |
 
-`run_url` is built from `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY`, and `GITHUB_RUN_ID`.
-`job` is the job ID in the workflow file, not a numeric ID. Matrix values are not collected;
-pass them in `extra_data` when needed.
-
-<a id="metadata-terraform"></a>
-### terraform
-
-- `workspace` (String) Selected Terraform CLI workspace.
-- `workspace_source` (String) Where the workspace was read from: `environment` for the `TF_WORKSPACE` environment variable,
-  `data_directory` for the `environment` file in the data directory (`TF_DATA_DIR`, or `.terraform` by default),
-  or `default` when the data directory has no `environment` file.
-
-This is the workspace selected in the local CLI, which is not necessarily the HCP Terraform workspace.
-To send the value of `terraform.workspace` instead, pass it in `extra_data`.
-State, backend configuration, and variable values are never read.
-
-<a id="metadata-toolchain"></a>
-### toolchain
-
-- `terraform` (String) Version reported by `terraform version -json`.
-- `opentofu` (String) Version reported by `tofu version -json`.
-- `git` (String) Version reported by `git --version`.
-- `github_cli` (String) Version reported by `gh --version`.
-- `telemetry_provider` (String) Version of this provider.
-
-The versions are of the tools found in `PATH`, which might differ from the executable running this provider.
-They do not show whether the current run uses Terraform or OpenTofu.
-The version commands run with `CHECKPOINT_DISABLE=1`, which disables the update checks of HashiCorp tools.
+Values that are not available are omitted.
+See the [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide for the type, source, and privacy considerations of each property.
 
 <a id="collection-cache"></a>
 ## Collection Cache
