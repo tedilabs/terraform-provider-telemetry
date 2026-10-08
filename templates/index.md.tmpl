@@ -21,6 +21,8 @@ Use the navigation to the left to read about the available functions.
 
 {{ tffile "examples/provider/provider.tf" }}
 
+~> **Note:** To disable a call, pass a `null` connection as in the example above. Do not wrap the call in a conditional expression such as `var.telemetry_enabled ? provider::telemetry::capture_posthog(...) : true`: Terraform evaluates both results of a conditional expression, so the function still runs and sends the event.
+
 ## Limitations
 
 ### Side effects
