@@ -28,11 +28,6 @@ check "telemetry" {
         project_token = var.posthog_project_token
       },
       {
-        machine            = true
-        network            = false
-        git                = false
-        github             = false
-        github_actions     = false
         deduplication_keys = ["module", "version"]
       },
       {

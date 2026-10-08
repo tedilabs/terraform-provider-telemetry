@@ -52,13 +52,12 @@ check "telemetry" {
     condition = provider::telemetry::capture_posthog(
       # A null connection disables the call.
       var.telemetry_enabled ? local.telemetry.connection : null,
+      # Keep only the machine and toolchain metadata.
       {
-        machine        = true
         network        = false
         git            = false
-        github         = false
         github_actions = false
-        toolchain      = true
+        terraform      = false
       },
       {
         module  = local.telemetry.module
@@ -114,8 +113,8 @@ See the [Caching and Deduplication](https://registry.terraform.io/providers/tedi
 
 ## Choose collectors
 
-Enable only the collectors that answer your questions.
-For example, `machine` and `toolchain` show the platforms and tool versions in use,
+Every collector except `github` is enabled by default, so disable the collectors that do not answer your questions.
+The example keeps only `machine` and `toolchain`, which show the platforms and tool versions in use
 without data that identifies people or machines.
 The `network`, `git`, `github`, and `github_actions` collectors include identifying data;
 see the [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide.

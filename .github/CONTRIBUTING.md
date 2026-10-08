@@ -5,7 +5,7 @@ with the tedilabs [Code of Conduct](https://github.com/tedilabs/.github/blob/mai
 
 The functions of this provider run inside other people's Terraform configurations and modules,
 and send data about the environments running them. Any bug fix and feature has to be considered in that context:
-a function must never make a Terraform run fail, and new metadata must stay opt-in. _Stability and privacy over features_.
+a function must never make a Terraform run fail, and every collector must be possible to disable. _Stability and privacy over features_.
 
 This provider follows [semantic versioning](https://semver.org/).
 
