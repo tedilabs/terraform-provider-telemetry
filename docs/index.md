@@ -100,11 +100,8 @@ Use these functions only for best-effort usage telemetry, never for auditing or 
 !> **Warning:** Some metadata identifies people or machines, such as the hostname, the public IP address, the Git remote URL, and the GitHub login. Enable only the collectors you need. The [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide lists every property and its source.
 
 Every metadata collector is disabled unless a function call enables it.
-When you add telemetry to a module that others use,
-make it opt-in, as in the example above, and document what is collected.
-
-Metadata describes the environment running Terraform. With remote execution, such as HCP Terraform
-or a CI/CD pipeline, it describes the remote runner, not the workstation of the person who started the run.
+To add telemetry to a module that others use, follow the
+[Using Telemetry in Modules](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/using-in-modules) guide.
 
 Connection settings, such as a project token, are function arguments.
 Marking a variable as `sensitive` hides its value in Terraform output, but saved plan files still contain it.

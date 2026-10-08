@@ -43,14 +43,38 @@ Set `cache_enabled = false` in `options` to collect fresh metadata for a call. T
 ## Event Deduplication
 
 By default, a call is skipped when the same provider process has already sent an event with identical properties,
-compared after merging `extra_data`. Set `deduplication_keys` to compare only the selected properties.
-For example, the following call sends at most one event for all instances of a module
-that share the same `module`, `version`, and `workspace` values:
+compared after merging `extra_data`. Instances of a module that pass the same `extra_data` therefore send one event
+per provider process, however many instances `count` or `for_each` creates.
+
+Set `deduplication_keys` to compare only the selected properties, so that calls that differ in other properties
+are still treated as duplicates. For example, the following call sends at most one event per module version,
+even when instances pass different `engine` values. The event carries the `engine` of the first instance;
+add `engine` to the keys to send one event per engine instead.
 
 ```terraform
-# Send at most one event per module, version, and workspace from a provider
-# process, even when the module has many instances through count or for_each.
-check "telemetry_deduplicated" {
+terraform {
+  required_providers {
+    telemetry = {
+      source = "tedilabs/telemetry"
+    }
+  }
+  # Provider functions require Terraform 1.8 and later.
+  required_version = ">= 1.8.0"
+}
+
+variable "posthog_project_token" {
+  type      = string
+  sensitive = true
+}
+
+variable "engine" {
+  description = "Database engine, which can differ between instances of the module."
+  type        = string
+}
+
+# Send at most one event per module and version from a provider process,
+# even when instances of the module pass different engine values.
+check "telemetry" {
   assert {
     condition = provider::telemetry::capture_posthog(
       {
@@ -63,20 +87,18 @@ check "telemetry_deduplicated" {
         git                = false
         github             = false
         github_actions     = false
-        deduplication_keys = ["module", "version", "workspace"]
+        deduplication_keys = ["module", "version"]
       },
       {
-        module    = "tedilabs/example/aws"
-        version   = "1.2.3"
-        workspace = terraform.workspace
+        module  = "tedilabs/example/aws"
+        version = "1.2.3"
+        engine  = var.engine
       }
     )
     error_message = "Telemetry invocation failed."
   }
 }
 ```
-
-To send one event per instance, also pass and select an instance identifier.
 
 * Paths are relative to the event properties, such as `module` or `machine.os`, without a `properties.` prefix.
   Each dot-separated segment selects an attribute of an object or a key of a map.

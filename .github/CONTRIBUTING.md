@@ -16,25 +16,20 @@ Please do not open an issue for a security problem. Follow the tedilabs
 
 ## Raising Issues
 
-We welcome issues of all kinds including feature requests, bug reports or documentation suggestions.
-Below are guidelines for well-formed issues of each type.
+We welcome bug reports, feature requests, and documentation suggestions.
 
 ### Bug Reports
 
-* [ ] **Test against latest release**: Make sure you test against the latest available version of Terraform and the provider.
-  It is possible we may have already fixed the bug you're experiencing.
-* [ ] **Search for duplicates**: It's helpful to keep bug reports consolidated to one thread, so do a quick search
-  on existing bug reports to check if anybody else has reported the same thing.
-* [ ] **Include steps to reproduce**: Provide the Terraform and provider versions, the function call,
+* [ ] **Test against the latest release** of Terraform and the provider; the bug may already be fixed.
+* [ ] **Search for duplicates** among the existing issues.
+* [ ] **Include steps to reproduce**: the Terraform and provider versions, the function call,
   and the event you expected compared to the event you received.
   Remove project tokens and other identifying data before sharing.
 
 ### Feature Requests
 
-* [ ] **Search for possible duplicate requests**: It's helpful to keep requests consolidated to one thread,
-  so do a quick search on existing requests to check if anybody else has reported the same thing.
-* [ ] **Include a use case description**: In addition to describing the behavior of the feature you'd like to see added,
-  it's helpful to also make a case for why the feature would be important and how it would benefit the provider.
+* [ ] **Search for duplicates** among the existing issues.
+* [ ] **Describe the use case**: why the feature matters, in addition to how it should behave.
 
 ## New Pull Request
 
@@ -97,10 +92,9 @@ provider_installation {
 }
 ```
 
-Set `TF_CLI_CONFIG_FILE` to that file when running Terraform.
-A configuration that only uses functions of this provider can run without `terraform init`;
-initialization would still try to resolve a published version.
-Terraform prints its normal development override warning in this mode.
+Set `TF_CLI_CONFIG_FILE` to that file when running Terraform, which then uses the development build
+and prints a warning about development overrides.
+A configuration without other providers or modules can run without `terraform init`.
 
 ### Generating documentation
 
@@ -109,9 +103,9 @@ to generate the documentation in the `docs/` directory. Do not edit `docs/` dire
 
 * Function definitions in `internal/provider` for the summaries, descriptions, signatures, and arguments.
 * `examples/provider/provider.tf` for the example on the provider overview page,
-  and `examples/functions/<name>/` for the function examples.
-* `templates/` for the page layouts and detailed guidance.
-  `options` is a dynamic argument, so its nested schema is written by hand in the function templates.
+  `examples/functions/<name>/` for the function examples, and `examples/guides/<name>/` for the guide examples.
+* `templates/` for the overview, function, and guide pages.
+  The nested schemas of function arguments, such as `connection` and `options`, are written by hand in the function templates.
 
 Then regenerate and validate the documentation, and commit `docs/` with the source changes:
 
@@ -139,5 +133,4 @@ No generic backend registry or additional destination is implemented until one i
 
 ## Releasing
 
-See the [release and Registry registration guide](RELEASING.md) for signing key setup, releases,
-Registry registration, and installation verification.
+See the [release guide](RELEASING.md) for releasing a version, verifying it, and replacing the signing key.
