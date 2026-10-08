@@ -203,41 +203,17 @@ See the [Collected Metadata](https://registry.terraform.io/providers/tedilabs/te
 <a id="collection-cache"></a>
 ## Collection Cache
 
-By default, each metadata group is collected once per provider process, when a call first needs it,
-and later calls reuse it. Unavailable and partial results are reused too.
-This avoids repeating the same commands and network requests, for example for each instance of a module.
-
-* The cache is held in memory only, and is not shared between provider processes.
-  Terraform can start separate provider processes for planning and applying, which collect the metadata again.
-* Cached metadata can become outdated if the environment changes while the provider process runs.
-* `extra_data`, connection settings, and events are never cached.
-  Caching does not reduce the number of events; see [Event Deduplication](#event-deduplication).
-
-Set `cache_enabled = false` in `options` to collect fresh metadata for a call. This does not update the cache.
+By default, each metadata group is collected once per provider process and reused by later calls.
+Set `cache_enabled = false` in `options` to collect fresh metadata for a call.
+See the [Caching and Deduplication](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/caching-and-deduplication#collection-cache) guide for details.
 
 <a id="event-deduplication"></a>
 ## Event Deduplication
 
-By default, a call is skipped when the same provider process has already sent an event with identical properties,
-compared after merging `extra_data`. Set `deduplication_keys` to compare only the selected properties.
-For example, selecting `module`, `version`, and `workspace` sends at most one event for all instances of a module,
-as in the [example](#example-deduplication). To send one event per instance, also pass and select an instance identifier.
-
-* Paths are relative to the event properties, such as `module` or `machine.os`, without a `properties.` prefix.
-  Each dot-separated segment selects an attribute of an object or a key of a map.
-  List indexes and keys that contain dots are not supported.
-* A path can select a whole object or list. Values are compared with their types.
-  The order of object keys does not matter, but the order of list elements does.
-* If a selected path is missing, the event is sent without deduplication, and is not recorded.
-  A `null` value that is present is compared like any other value.
-* Events for different PostHog hosts or project tokens are never treated as duplicates of each other.
-* Only the first event is sent, and later duplicates are skipped even if its delivery failed.
-  The properties that `deduplication_keys` does not select come from the first event.
-  Among concurrent calls, which one is first is not defined.
-* Only hashes of the compared values are held, in memory. They are not shared between provider processes,
-  so separate processes for planning and applying can each send an event.
-
-Set `deduplication_enabled = false` in `options` to send every event. `cache_enabled` does not affect deduplication.
+By default, a call is skipped when the same provider process has already sent an event with identical properties.
+Set `deduplication_keys` to compare only the selected properties, as in the [example](#example-deduplication),
+or set `deduplication_enabled = false` to send every event.
+See the [Caching and Deduplication](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/caching-and-deduplication#event-deduplication) guide for details.
 
 ## Error Handling
 
