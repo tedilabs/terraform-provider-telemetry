@@ -31,7 +31,7 @@ func optionsParameter() function.DynamicParameter {
 	// requires every declared attribute and cannot express this default.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		MarkdownDescription: "Object or map with required `machine`, `network`, `git`, `github`, and `github_actions` booleans. Optional `terraform` and `toolchain` enable execution metadata and tool versions and default to `false`. Enable only the desired collectors. Optional `cache_enabled` and `deduplication_enabled` default to `true`. Optional `deduplication_keys` selects dot-separated property paths; an omitted or empty list compares all event properties.",
+		MarkdownDescription: "Object or map that enables metadata collectors and configures caching and deduplication. `machine`, `network`, `git`, `github`, and `github_actions` are required booleans; `terraform`, `toolchain`, `cache_enabled`, `deduplication_enabled`, and `deduplication_keys` are optional. A null value skips the capture.",
 	}
 }
 

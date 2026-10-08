@@ -1,46 +1,43 @@
+# Configuration using provider functions must include required_providers configuration.
 terraform {
-  required_version = ">= 1.8.0"
   required_providers {
     telemetry = {
       source = "tedilabs/telemetry"
     }
   }
+  # Provider functions require Terraform 1.8 and later.
+  required_version = ">= 1.8.0"
 }
 
-variable "telemetry_enabled" {
-  type    = bool
-  default = false
-}
-
-variable "posthog_connection" {
-  type = object({
-    host          = string
-    project_token = string
-  })
+variable "posthog_project_token" {
+  type      = string
   sensitive = true
 }
 
 check "telemetry" {
   assert {
-    condition = var.telemetry_enabled ? provider::telemetry::capture_posthog(
-      var.posthog_connection,
+    condition = provider::telemetry::capture_posthog(
+      # connection
       {
-        machine               = true
-        network               = false
-        git                   = false
-        github                = false
-        github_actions        = false
-        terraform             = true
-        toolchain             = true
-        deduplication_enabled = true
-        deduplication_keys    = ["module", "workspace"]
+        host          = "https://us.i.posthog.com"
+        project_token = var.posthog_project_token
       },
+      # options
       {
-        workspace = terraform.workspace
-        module    = "example"
+        machine        = true
+        network        = false
+        git            = true
+        github         = false
+        github_actions = true
+        terraform      = true
+        toolchain      = true
+      },
+      # extra_data
+      {
+        module  = "example"
+        version = "1.0.0"
       }
-    ) : true
-
+    )
     error_message = "Telemetry invocation failed."
   }
 }

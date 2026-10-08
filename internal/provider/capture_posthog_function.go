@@ -27,17 +27,17 @@ func (f *CapturePostHogFunction) Metadata(_ context.Context, _ function.Metadata
 func (f *CapturePostHogFunction) Definition(_ context.Context, _ function.DefinitionRequest, resp *function.DefinitionResponse) {
 	resp.Definition = function.Definition{
 		Summary:             "Send best-effort telemetry to PostHog and always return true.",
-		MarkdownDescription: "Attempts to send a non-duplicate `terraform_capture` event to PostHog. Every function invocation returns `true`; this does not indicate delivery success. Collection and delivery failures are ignored. The function deliberately performs network side effects and does not guarantee exactly-once execution.",
+		MarkdownDescription: "Collects the enabled metadata about the environment running Terraform and attempts to send it to [PostHog](https://posthog.com/) as a `terraform_capture` event. The function always returns `true`, whether the event is sent, skipped, deduplicated, or fails to deliver.",
 		Parameters: []function.Parameter{
 			function.ObjectParameter{
 				Name: "connection", AllowNullValue: true, AllowUnknownValues: true,
-				MarkdownDescription: "Object with `host` and `project_token` string attributes. Use a PostHog ingestion base URL such as `https://us.i.posthog.com`; the function appends `/i/v0/e/`. Supply the project token, not a personal API key. Connection configuration is supplied here, not in a provider block.",
+				MarkdownDescription: "PostHog ingestion base URL `host` (for example, `https://us.i.posthog.com`) and `project_token`. A null value skips the capture.",
 				AttributeTypes:      map[string]attr.Type{"host": types.StringType, "project_token": types.StringType},
 			},
 			optionsParameter(),
 			function.DynamicParameter{
 				Name: "extra_data", AllowNullValue: true, AllowUnknownValues: true,
-				MarkdownDescription: "Additional key/value data as an object or map, deep-merged directly into event properties with caller values taking precedence. There is no automatic `extra_data` wrapper. Objects merge recursively; lists, scalars, and null replace existing values. Pass `{}` when empty.",
+				MarkdownDescription: "Additional event properties as an object or map, deep-merged over the collected metadata. Use `{}` when there is nothing to add. A null value is treated as `{}`.",
 			},
 		},
 		Return: function.BoolReturn{},
