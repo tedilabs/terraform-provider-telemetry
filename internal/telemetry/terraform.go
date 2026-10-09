@@ -1,17 +1,29 @@
 package telemetry
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-func (c Collector) terraform() map[string]any {
+func (c Collector) terraform(ctx context.Context) map[string]any {
 	result := map[string]any{}
 	if c.Parent != nil {
 		if parent, ok := c.Parent(); ok {
-			result["command_id"] = commandID(parent)
+			if parent.Start != "" {
+				result["command_id"] = commandID(parent)
+			}
+			// Run only a recognized Terraform or OpenTofu executable.
+			if cli, ok := cliName(parent.Executable); ok {
+				result["cli"] = cli
+				if out, err := c.Run(ctx, parent.Executable, "version", "-json"); err == nil {
+					if version := terraformVersion(out); version != "" {
+						result["cli_version"] = version
+					}
+				}
+			}
 		}
 	}
 	if workspace := c.Getenv("TF_WORKSPACE"); workspace != "" {
@@ -31,4 +43,16 @@ func (c Collector) terraform() map[string]any {
 		}
 	}
 	return result
+}
+
+// cliName recognizes the executable of the CLI that started this provider.
+func cliName(executable string) (string, bool) {
+	name := strings.ToLower(executable[strings.LastIndexAny(executable, `/\`)+1:])
+	switch strings.TrimSuffix(name, ".exe") {
+	case "terraform":
+		return "terraform", true
+	case "tofu":
+		return "opentofu", true
+	}
+	return "", false
 }

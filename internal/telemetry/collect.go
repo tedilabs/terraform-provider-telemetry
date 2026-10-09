@@ -69,7 +69,7 @@ func (c Collector) Collect(ctx context.Context, opts Options, cache bool) map[st
 	collect("github", opts.GitHub, &entries.github, func() map[string]any { return c.github(ctx) })
 	collect("github_actions", opts.GitHubActions, &entries.githubActions, c.actions)
 	collect("hcp_terraform", opts.HCPTerraform, &entries.hcpTerraform, c.hcpTerraform)
-	collect("terraform", opts.Terraform, &entries.terraform, c.terraform)
+	collect("terraform", opts.Terraform, &entries.terraform, func() map[string]any { return c.terraform(ctx) })
 	collect("toolchain", opts.Toolchain, &entries.toolchain, func() map[string]any { return c.toolchain(ctx) })
 	return properties
 }

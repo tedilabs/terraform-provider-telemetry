@@ -19,7 +19,7 @@ This guide lists the properties of each group and where they come from.
 | [`github`](#github) | `false` | GitHub CLI | `login`, `id`, `name`, `html_url` |
 | [`github_actions`](#github_actions) | `true` | GitHub Actions environment variables | `actor`, `actor_id`, `triggering_actor`, and the repository |
 | [`hcp_terraform`](#hcp_terraform) | `true` | HCP Terraform run environment variables | The organization, workspace, and project names, and the branch |
-| [`terraform`](#terraform) | `true` | Terraform CLI workspace selection | The workspace name |
+| [`terraform`](#terraform) | `true` | Parent CLI process and workspace selection | The workspace name |
 | [`toolchain`](#toolchain) | `true` | Version commands of tools in `PATH` | None |
 
 Set a collector to `false` in `options` to disable it, and disable the collectors you do not need.
@@ -138,6 +138,9 @@ Use `run_id` to group the events of an HCP Terraform run.
   The planning and applying phases of one `terraform apply` share it, while separate commands,
   such as `terraform plan -out` and the `terraform apply` of the saved plan, have different identifiers.
   Group events by it to count commands instead of events. Omitted on platforms other than Linux, macOS, and Windows.
+- `cli` (String) `terraform` or `opentofu`: the CLI that started the provider process,
+  recognized by the file name of its executable. Omitted for other executables.
+- `cli_version` (String) Version reported by `version -json` of that executable, which is the version actually running.
 - `workspace` (String) Selected Terraform CLI workspace.
 - `workspace_source` (String) Where the workspace was read from: `environment` for the `TF_WORKSPACE` environment variable,
   `data_directory` for the `environment` file in the data directory (`TF_DATA_DIR`, or `.terraform` by default),
@@ -158,5 +161,5 @@ State, backend configuration, and variable values are never read.
 - `telemetry_provider` (String) Version of this provider.
 
 The versions are of the tools found in `PATH`, which might differ from the executable running this provider.
-They do not show whether the current run uses Terraform or OpenTofu.
+The [`terraform`](#terraform) collector reports the CLI and the version that run this provider as `cli` and `cli_version`.
 The version commands run with `CHECKPOINT_DISABLE=1`, which disables the update checks of HashiCorp tools.

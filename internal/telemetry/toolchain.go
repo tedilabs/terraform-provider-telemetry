@@ -28,12 +28,7 @@ func (c Collector) toolchain(ctx context.Context) map[string]any {
 				return
 			}
 			if tool.command == "terraform" || tool.command == "tofu" {
-				var data struct {
-					Version string `json:"terraform_version"`
-				}
-				if json.Unmarshal(out, &data) == nil {
-					tool.version = data.Version
-				}
+				tool.version = terraformVersion(out)
 			} else {
 				parts := strings.Fields(string(out))
 				if len(parts) >= 3 && parts[0] == tool.command && parts[1] == "version" {
@@ -50,4 +45,15 @@ func (c Collector) toolchain(ctx context.Context) map[string]any {
 		}
 	}
 	return result
+}
+
+// terraformVersion reads the output of `terraform version -json` or `tofu version -json`.
+func terraformVersion(out []byte) string {
+	var data struct {
+		Version string `json:"terraform_version"`
+	}
+	if json.Unmarshal(out, &data) != nil {
+		return ""
+	}
+	return data.Version
 }
