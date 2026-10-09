@@ -136,7 +136,10 @@ func (c inputCaptureCheck) check() error {
 			return fmt.Errorf("unexpected or duplicate capture %q: %#v", name, properties)
 		}
 		seen[name] = true
-		want := map[string]any{"$process_person_profile": false, "$geoip_disable": true}
+		want := map[string]any{
+			"$process_person_profile": false, "$geoip_disable": true,
+			"$lib": "terraform-provider-telemetry", "$lib_version": "dev",
+		}
 		for key, value := range extra {
 			want[key] = value
 		}

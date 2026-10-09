@@ -128,6 +128,8 @@ The event properties contain the enabled metadata groups and the attributes of `
   "properties": {
     "$process_person_profile": false,
     "$geoip_disable": true,
+    "$lib": "terraform-provider-telemetry",
+    "$lib_version": "<provider version>",
     "machine": { "os": { "name": "Ubuntu", "version": "24.04" }, "arch": "amd64", "cpu_count": 4, "memory_size": 8192 },
     "module": "example",
     "version": "1.0.0"
@@ -136,7 +138,10 @@ The event properties contain the enabled metadata groups and the attributes of `
 ```
 
 The `$process_person_profile` and `$geoip_disable` properties default to `false` and `true`,
-so PostHog neither creates person profiles nor adds GeoIP properties. `extra_data` can override them.
+so PostHog neither creates person profiles nor adds GeoIP properties.
+The `$lib` and `$lib_version` properties identify this provider and its version as the sending library.
+`extra_data` can override all four.
+The request also carries the `User-Agent` header `terraform-provider-telemetry/<provider version>`.
 See the PostHog [capture API](https://posthog.com/docs/api/capture) for the event format.
 
 ### Merging `extra_data`

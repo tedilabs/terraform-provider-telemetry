@@ -34,7 +34,8 @@ func (c PostHogConnection) Valid() bool {
 
 // CapturePostHog never retries. Its error describes a failed delivery for logging;
 // callers must not fail on it.
-func CapturePostHog(ctx context.Context, connection PostHogConnection, properties map[string]any) error {
+// version identifies this provider in the User-Agent header.
+func CapturePostHog(ctx context.Context, connection PostHogConnection, properties map[string]any, version string) error {
 	if !connection.Valid() {
 		return errors.New("invalid connection")
 	}
@@ -64,6 +65,7 @@ func CapturePostHog(ctx context.Context, connection PostHogConnection, propertie
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "terraform-provider-telemetry/"+version)
 	client := &http.Client{
 		Timeout: 2 * time.Second,
 		// Never forward the project token through a redirect.
