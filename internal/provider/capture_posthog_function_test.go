@@ -26,7 +26,7 @@ var connectionTypes = map[string]attr.Type{"host": types.StringType, "project_to
 
 var optionTypes = map[string]attr.Type{
 	"machine": types.BoolType, "network": types.BoolType, "git": types.BoolType,
-	"github": types.BoolType, "github_actions": types.BoolType,
+	"github": types.BoolType, "github_actions": types.BoolType, "hcp_terraform": types.BoolType,
 	"terraform": types.BoolType, "toolchain": types.BoolType,
 }
 
@@ -327,7 +327,7 @@ func TestCollectionOptionsValidation(t *testing.T) {
 }
 
 func TestCollectionOptionDefaults(t *testing.T) {
-	want := telemetry.Options{Machine: true, Network: true, Git: true, GitHubActions: true, Terraform: true, Toolchain: true}
+	want := telemetry.Options{Machine: true, Network: true, Git: true, GitHubActions: true, HCPTerraform: true, Terraform: true, Toolchain: true}
 	for _, value := range []types.Dynamic{
 		types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{})),
 		types.DynamicValue(types.MapValueMust(types.BoolType, map[string]attr.Value{})),

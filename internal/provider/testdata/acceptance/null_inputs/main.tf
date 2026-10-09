@@ -18,6 +18,7 @@ locals {
     git            = false
     github         = false
     github_actions = false
+    hcp_terraform  = false
     terraform      = false
     toolchain      = false
   }

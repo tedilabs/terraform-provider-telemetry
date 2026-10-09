@@ -18,6 +18,7 @@ type Options struct {
 	Git           bool `tfsdk:"git"`
 	GitHub        bool `tfsdk:"github"`
 	GitHubActions bool `tfsdk:"github_actions"`
+	HCPTerraform  bool `tfsdk:"hcp_terraform"`
 	Terraform     bool `tfsdk:"terraform"`
 	Toolchain     bool `tfsdk:"toolchain"`
 }
@@ -67,6 +68,7 @@ func (c Collector) Collect(ctx context.Context, opts Options, cache bool) map[st
 	collect("git", opts.Git, &entries.git, func() map[string]any { return c.git(ctx) })
 	collect("github", opts.GitHub, &entries.github, func() map[string]any { return c.github(ctx) })
 	collect("github_actions", opts.GitHubActions, &entries.githubActions, c.actions)
+	collect("hcp_terraform", opts.HCPTerraform, &entries.hcpTerraform, c.hcpTerraform)
 	collect("terraform", opts.Terraform, &entries.terraform, c.terraform)
 	collect("toolchain", opts.Toolchain, &entries.toolchain, func() map[string]any { return c.toolchain(ctx) })
 	return properties

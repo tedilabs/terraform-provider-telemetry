@@ -18,6 +18,7 @@ This guide lists the properties of each group and where they come from.
 | [`git`](#git) | `true` | Git repository of the working directory | `remote`, and the repository and branch names |
 | [`github`](#github) | `false` | GitHub CLI | `login`, `id`, `name`, `html_url` |
 | [`github_actions`](#github_actions) | `true` | GitHub Actions environment variables | `actor`, `actor_id`, `triggering_actor`, and the repository |
+| [`hcp_terraform`](#hcp_terraform) | `true` | HCP Terraform run environment variables | The organization, workspace, and project names, and the branch |
 | [`terraform`](#terraform) | `true` | Terraform CLI workspace selection | The workspace name |
 | [`toolchain`](#toolchain) | `true` | Version commands of tools in `PATH` | None |
 
@@ -108,6 +109,27 @@ Each property is read from a default environment variable of GitHub Actions:
 `job` is the job ID in the workflow file, not a numeric ID. Matrix values are not collected;
 pass them in `extra_data` when needed.
 
+<a id="hcp_terraform"></a>
+## hcp_terraform
+
+Collected only in HCP Terraform runs, when the `TFC_RUN_ID` environment variable is set.
+Each property is read from an [environment variable that HCP Terraform sets for each run](https://developer.hashicorp.com/terraform/cloud-docs/run/run-environment):
+
+| Property | Environment variable |
+| --- | --- |
+| `run_id` | `TFC_RUN_ID` |
+| `workspace_id` | `TFC_WORKSPACE_ID` |
+| `workspace_name` | `TFC_WORKSPACE_NAME` |
+| `workspace_slug` | `TFC_WORKSPACE_SLUG` |
+| `project_id` | `TFC_PROJECT_ID` |
+| `project_name` | `TFC_PROJECT_NAME` |
+| `git_branch` | `TFC_CONFIGURATION_VERSION_GIT_BRANCH` |
+| `git_commit` | `TFC_CONFIGURATION_VERSION_GIT_COMMIT_SHA` |
+| `git_tag` | `TFC_CONFIGURATION_VERSION_GIT_TAG` |
+
+`workspace_slug` combines the organization and workspace names, such as `acme/prod`.
+Use `run_id` to group the events of an HCP Terraform run.
+
 <a id="terraform"></a>
 ## terraform
 
@@ -121,7 +143,8 @@ pass them in `extra_data` when needed.
   `data_directory` for the `environment` file in the data directory (`TF_DATA_DIR`, or `.terraform` by default),
   or `default` when the data directory has no `environment` file.
 
-This is the workspace selected in the local CLI, which is not necessarily the HCP Terraform workspace.
+This is the workspace selected in the local CLI, which is not necessarily the HCP Terraform workspace;
+the [`hcp_terraform`](#hcp_terraform) collector reports the HCP Terraform workspace.
 To send the value of `terraform.workspace` instead, pass it in `extra_data`.
 State, backend configuration, and variable values are never read.
 

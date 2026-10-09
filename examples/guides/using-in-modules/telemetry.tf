@@ -38,6 +38,7 @@ check "telemetry" {
         network        = false
         git            = false
         github_actions = false
+        hcp_terraform  = false
         terraform      = false
       },
       {
