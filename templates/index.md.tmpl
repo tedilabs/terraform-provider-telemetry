@@ -38,7 +38,7 @@ Terraform decides when and how often a function call is evaluated,
 so the number of events is not a reliable count of Terraform runs, module instances, or users.
 
 * A single command can evaluate a call more than once. For example, `terraform apply` plans and then applies,
-  and can send an event in each phase.
+  and can send an event in each phase. These events share the same `terraform.command_id`.
 * A call might not be evaluated at all, for example when an earlier error stops Terraform,
   when its arguments are unknown, when `-target` excludes it, or, for calls in `check` blocks, during destroy operations.
 * Delivery failures are ignored and never retried.

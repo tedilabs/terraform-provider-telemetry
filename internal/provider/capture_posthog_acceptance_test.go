@@ -252,7 +252,7 @@ func (c *captureCheck) check(checks []tfjson.CheckResultStatic) error {
 				return fmt.Errorf("%s: got %#v, want %#v", path, got, want)
 			}
 		}
-		for _, path := range []string{"machine.os.name", "git.commit", "toolchain.terraform", "toolchain.git"} {
+		for _, path := range []string{"machine.os.name", "git.commit", "terraform.command_id", "toolchain.terraform", "toolchain.git"} {
 			if value, ok := property(path).(string); !ok || value == "" {
 				return fmt.Errorf("missing %s", path)
 			}

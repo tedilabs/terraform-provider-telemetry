@@ -24,6 +24,8 @@ Both mechanisms keep their state in memory, in the provider process.
 Terraform starts provider processes on its own: for example, `terraform apply` can plan with one process
 and apply with another. Each process starts with an empty cache and no recorded events,
 so metadata is collected again and the same event can be sent once per process.
+Events from the processes of one command share the same `terraform.command_id`,
+which the [`terraform`](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata#terraform) collector adds.
 
 <a id="collection-cache"></a>
 ## Collection Cache

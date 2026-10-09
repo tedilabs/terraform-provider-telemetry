@@ -27,11 +27,15 @@ type Collector struct {
 	Getenv         func(string) string
 	ReadFile       func(string) ([]byte, error)
 	LookupPublicIP func(context.Context) string
+	Parent         func() (Process, bool)
 	cache          *collectionCache
 }
 
 func NewCollector() Collector {
-	return Collector{Run: runCommand, Getenv: os.Getenv, ReadFile: os.ReadFile, LookupPublicIP: lookupPublicIP, cache: &collectionCache{}}
+	return Collector{
+		Run: runCommand, Getenv: os.Getenv, ReadFile: os.ReadFile, LookupPublicIP: lookupPublicIP, Parent: parentProcess,
+		cache: &collectionCache{},
+	}
 }
 
 // Collect caches only the explicitly listed metadata groups when cache is enabled.
