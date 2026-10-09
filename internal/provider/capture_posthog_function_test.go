@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov6"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
+	"github.com/hashicorp/terraform-plugin-log/tflogtest"
 	"github.com/tedilabs/terraform-provider-telemetry/internal/telemetry"
 )
 
@@ -288,16 +290,24 @@ func TestCollectionOptionsValidation(t *testing.T) {
 		} else {
 			value = optionsWithCache(types.ObjectValueMust(optionTypes, attributes), types.BoolValue(false))
 		}
-		opts, ok := collectionOptions(value)
-		if !ok || opts.cacheEnabled || opts.collect != (telemetry.Options{Git: true}) {
-			t.Fatalf("invalid parsed options: %+v, cache=%v, ok=%v", opts, opts.cacheEnabled, ok)
+		opts, err := collectionOptions(value)
+		if err != nil || opts.cacheEnabled || opts.collect != (telemetry.Options{Git: true}) {
+			t.Fatalf("invalid parsed options: %+v, cache=%v, err=%v", opts, opts.cacheEnabled, err)
 		}
 	}
 	for name := range optionTypes {
 		for _, invalid := range []attr.Value{types.BoolNull(), types.BoolUnknown(), types.StringValue("true")} {
-			if _, ok := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: invalid})); ok {
+			if _, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: invalid})); err == nil {
 				t.Fatalf("invalid %s accepted", name)
 			}
+		}
+	}
+	for _, value := range []types.Dynamic{
+		optionsWithAttributes(disabledOptions(), map[string]attr.Value{"netwrok": types.BoolValue(false)}),
+		types.DynamicValue(types.MapValueMust(types.BoolType, map[string]attr.Value{"netwrok": types.BoolValue(false)})),
+	} {
+		if _, err := collectionOptions(value); err == nil || !strings.Contains(err.Error(), `"netwrok"`) {
+			t.Fatalf("misspelled option was not rejected: %v", err)
 		}
 	}
 	for _, value := range []types.Dynamic{
@@ -310,7 +320,7 @@ func TestCollectionOptionsValidation(t *testing.T) {
 		types.DynamicValue(types.MapUnknown(types.BoolType)),
 		types.DynamicValue(types.MapValueMust(types.StringType, map[string]attr.Value{"machine": types.StringValue("true")})),
 	} {
-		if _, ok := collectionOptions(value); ok {
+		if _, err := collectionOptions(value); err == nil {
 			t.Fatalf("accepted invalid options: %v", value)
 		}
 	}
@@ -322,19 +332,19 @@ func TestCollectionOptionDefaults(t *testing.T) {
 		types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{})),
 		types.DynamicValue(types.MapValueMust(types.BoolType, map[string]attr.Value{})),
 	} {
-		opts, ok := collectionOptions(value)
-		if !ok || opts.collect != want || !opts.cacheEnabled || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 0 {
-			t.Fatalf("unexpected defaults for %v: %+v, ok=%v", value, opts, ok)
+		opts, err := collectionOptions(value)
+		if err != nil || opts.collect != want || !opts.cacheEnabled || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 0 {
+			t.Fatalf("unexpected defaults for %v: %+v, err=%v", value, opts, err)
 		}
 	}
 	// Each attribute overrides only its own default.
-	opts, ok := collectionOptions(types.DynamicValue(types.ObjectValueMust(
+	opts, err := collectionOptions(types.DynamicValue(types.ObjectValueMust(
 		map[string]attr.Type{"network": types.BoolType, "github": types.BoolType},
 		map[string]attr.Value{"network": types.BoolValue(false), "github": types.BoolValue(true)},
 	)))
 	want.Network, want.GitHub = false, true
-	if !ok || opts.collect != want {
-		t.Fatalf("unexpected overridden defaults: %+v, ok=%v", opts, ok)
+	if err != nil || opts.collect != want {
+		t.Fatalf("unexpected overridden defaults: %+v, err=%v", opts, err)
 	}
 }
 
@@ -377,5 +387,46 @@ func TestTerraformAndToolchainCategories(t *testing.T) {
 	f.Run(context.Background(), function.RunRequest{Arguments: function.NewArgumentsData([]attr.Value{connectionValue("https://example.invalid"), options, extra})}, &resp)
 	if resp.Error != nil || !resp.Result.Value().Equal(types.BoolValue(true)) || sends != 1 {
 		t.Fatalf("capture failed: %+v", resp)
+	}
+}
+
+func TestCaptureLogsWithoutSecrets(t *testing.T) {
+	resetDeduplication(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	var output bytes.Buffer
+	ctx := tflogtest.RootLogger(context.Background(), &output)
+	connection := types.ObjectValueMust(connectionTypes, map[string]attr.Value{
+		"host": types.StringValue(server.URL), "project_token": types.StringValue("secret-token"),
+	})
+	extra := types.DynamicValue(types.ObjectValueMust(
+		map[string]attr.Type{"value": types.StringType}, map[string]attr.Value{"value": types.StringValue("private-value")},
+	))
+	runCapture(t, ctx, connection, optionsWithAttributes(disabledOptions(), map[string]attr.Value{"netwrok": types.BoolValue(false)}), extra)
+	runCapture(t, ctx, connection, disabledOptions(), extra)
+	runCapture(t, ctx, connection, disabledOptions(), extra)
+	raw := output.String()
+	if strings.Contains(raw, "secret-token") || strings.Contains(raw, "private-value") {
+		t.Fatalf("logs contain the project token or event properties: %s", raw)
+	}
+	entries, err := tflogtest.MultilineJSONDecode(&output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []struct{ message, field, contains string }{
+		{"Skipped telemetry capture", "reason", `"netwrok"`},
+		{"Failed to send telemetry event", "error", "500"},
+		{"Skipped telemetry capture", "reason", "identical event"},
+	}
+	if len(entries) != len(want) {
+		t.Fatalf("expected %d log entries, got %d: %s", len(want), len(entries), raw)
+	}
+	for i, entry := range entries {
+		value, _ := entry[want[i].field].(string)
+		if entry["@level"] != "debug" || entry["@message"] != want[i].message || !strings.Contains(value, want[i].contains) {
+			t.Errorf("unexpected log entry %d: %v", i, entry)
+		}
 	}
 }

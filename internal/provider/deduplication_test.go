@@ -131,7 +131,7 @@ func TestDeduplicationOptionsValidation(t *testing.T) {
 		},
 	} {
 		for _, value := range values {
-			if _, ok := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: value})); ok {
+			if _, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: value})); err == nil {
 				t.Errorf("accepted invalid %s: %v", name, value)
 			}
 		}
@@ -140,8 +140,8 @@ func TestDeduplicationOptionsValidation(t *testing.T) {
 		types.TupleValueMust([]attr.Type{types.StringType}, []attr.Value{types.StringValue("module")}),
 		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("module")}),
 	} {
-		opts, ok := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"deduplication_keys": keys}))
-		if !ok || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 1 || opts.deduplicationKeys[0] != "module" {
+		opts, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"deduplication_keys": keys}))
+		if err != nil || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 1 || opts.deduplicationKeys[0] != "module" {
 			t.Fatalf("valid keys were not decoded: %+v", opts)
 		}
 	}

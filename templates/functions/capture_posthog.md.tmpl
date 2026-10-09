@@ -41,6 +41,8 @@ Do not wrap the whole call in a conditional expression: Terraform evaluates both
 ### Nested Schema for `options`
 
 `options` accepts an object or a map. All attributes are optional; pass `{}` to use the defaults.
+Any other attribute, such as a misspelled collector name, skips the capture,
+so that a typo cannot leave a collector enabled by default.
 
 Optional:
 
@@ -141,10 +143,15 @@ The function never returns an error or a warning. It skips the capture and retur
 * `connection` or `options` is null, `connection.host` is not a valid URL, or `connection.project_token` is empty.
 * An argument contains unknown values, such as attributes of resources that are not created yet.
   A later evaluation with known values can send the event.
-* An attribute of `options` is null or has the wrong type, or a path in `deduplication_keys` has an empty segment.
+* `options` has an unknown attribute, an attribute of `options` is null or has the wrong type,
+  or a path in `deduplication_keys` has an empty segment.
 * `extra_data` is not an object or a map.
 
 Terraform still rejects a call with the wrong number of arguments or incompatible argument types before the function runs.
 
 Collection and delivery share a five-second time limit, and each command and HTTP request times out after two seconds.
 Requests are not retried, redirects are not followed, and the standard proxy environment variables are honored.
+
+To see why a capture was skipped or whether delivery failed, run Terraform with `TF_LOG_PROVIDER=DEBUG`
+(or `TF_LOG=DEBUG`). The function logs the reason of every skip and the result of every delivery at the debug level.
+The logs never contain the project token or the event properties.

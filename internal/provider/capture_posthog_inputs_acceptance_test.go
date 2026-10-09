@@ -34,7 +34,7 @@ func TestAccCapturePostHogInputs(t *testing.T) {
 			name: "null_inputs",
 			results: []string{
 				"null_connection", "null_host", "null_project_token", "null_options",
-				"null_collector_option", "null_setting_option", "null_key", "null_extra_data", "known", "nested_nulls",
+				"null_collector_option", "null_setting_option", "null_key", "misspelled_option", "null_extra_data", "known", "nested_nulls",
 			},
 			want: map[string]map[string]any{
 				"":      {}, // Null extra_data is an empty object, so capture still runs.

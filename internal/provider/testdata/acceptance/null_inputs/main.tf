@@ -32,6 +32,7 @@ locals {
     null_collector_option = provider::telemetry::capture_posthog(local.connection, merge(local.options, { machine = null }), {})
     null_setting_option   = provider::telemetry::capture_posthog(local.connection, merge(local.options, { cache_enabled = null }), {})
     null_key              = provider::telemetry::capture_posthog(local.connection, merge(local.options, { deduplication_keys = [null] }), {})
+    misspelled_option     = provider::telemetry::capture_posthog(local.connection, merge(local.options, { netwrok = false }), { test_case = "misspelled_option" })
     null_extra_data       = provider::telemetry::capture_posthog(local.connection, local.options, null)
     known                 = provider::telemetry::capture_posthog(local.connection, local.options, { test_case = "known", value = "known" })
     nested_nulls = provider::telemetry::capture_posthog(local.connection, local.options, {

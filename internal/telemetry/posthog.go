@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -31,14 +32,15 @@ func (c PostHogConnection) Valid() bool {
 	return c.endpoint() != "" && strings.TrimSpace(c.ProjectToken) != ""
 }
 
-// CapturePostHog deliberately ignores all transport failures and never retries.
-func CapturePostHog(ctx context.Context, connection PostHogConnection, properties map[string]any) {
+// CapturePostHog never retries. Its error describes a failed delivery for logging;
+// callers must not fail on it.
+func CapturePostHog(ctx context.Context, connection PostHogConnection, properties map[string]any) error {
 	if !connection.Valid() {
-		return
+		return errors.New("invalid connection")
 	}
 	var id [16]byte
 	if _, err := rand.Read(id[:]); err != nil {
-		return
+		return err
 	}
 	id[6] = (id[6] & 0x0f) | 0x40
 	id[8] = (id[8] & 0x3f) | 0x80
@@ -55,11 +57,11 @@ func CapturePostHog(ctx context.Context, connection PostHogConnection, propertie
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return
+		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, connection.endpoint(), bytes.NewReader(body))
 	if err != nil {
-		return
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{
@@ -68,7 +70,12 @@ func CapturePostHog(ctx context.Context, connection PostHogConnection, propertie
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := client.Do(req)
-	if err == nil {
-		resp.Body.Close()
+	if err != nil {
+		return err
 	}
+	resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return fmt.Errorf("unexpected response status %s", resp.Status)
+	}
+	return nil
 }
