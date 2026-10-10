@@ -34,18 +34,21 @@ func (c PostHogConnection) Valid() bool {
 
 // CapturePostHog never retries. Its error describes a failed delivery for logging;
 // callers must not fail on it.
+// An empty distinctID sends the event with a new random UUID.
 // version identifies this provider in the User-Agent header.
-func CapturePostHog(ctx context.Context, connection PostHogConnection, properties map[string]any, version string) error {
+func CapturePostHog(ctx context.Context, connection PostHogConnection, distinctID string, properties map[string]any, version string) error {
 	if !connection.Valid() {
 		return errors.New("invalid connection")
 	}
-	var id [16]byte
-	if _, err := rand.Read(id[:]); err != nil {
-		return err
+	if distinctID == "" {
+		var id [16]byte
+		if _, err := rand.Read(id[:]); err != nil {
+			return err
+		}
+		id[6] = (id[6] & 0x0f) | 0x40
+		id[8] = (id[8] & 0x3f) | 0x80
+		distinctID = fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:])
 	}
-	id[6] = (id[6] & 0x0f) | 0x40
-	id[8] = (id[8] & 0x3f) | 0x80
-	distinctID := fmt.Sprintf("%x-%x-%x-%x-%x", id[:4], id[4:6], id[6:8], id[8:10], id[10:])
 
 	// Property defaults can be overridden; transport fields remain separate.
 	props := map[string]any{"$process_person_profile": false, "$geoip_disable": true}

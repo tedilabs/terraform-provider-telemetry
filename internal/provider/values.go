@@ -24,6 +24,7 @@ type captureOptions struct {
 	cacheEnabled         bool
 	deduplicationEnabled bool
 	deduplicationKeys    []string
+	identityKeys         []string
 }
 
 // Shared by capture functions for all telemetry destinations.
@@ -32,7 +33,7 @@ func optionsParameter() function.DynamicParameter {
 	// requires every declared attribute and cannot express these defaults.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		MarkdownDescription: "Object or map that selects metadata collectors and configures caching and deduplication. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `hcp_terraform`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` defaults to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
+		MarkdownDescription: "Object or map that selects metadata collectors and configures caching, deduplication, and the event identity. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `hcp_terraform`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` and `identity_keys` default to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
 	}
 }
 
@@ -64,13 +65,14 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 		"terraform": &opts.collect.Terraform, "toolchain": &opts.collect.Toolchain,
 		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
 	}
+	paths := map[string]*[]string{"deduplication_keys": &opts.deduplicationKeys, "identity_keys": &opts.identityKeys}
 	for key, value := range attributes {
-		if key == "deduplication_keys" {
-			keys, err := deduplicationKeys(value)
+		if target, ok := paths[key]; ok {
+			keys, err := propertyPaths(key, value)
 			if err != nil {
 				return opts, err
 			}
-			opts.deduplicationKeys = keys
+			*target = keys
 			continue
 		}
 		// Reject unknown attributes, so that a misspelled collector cannot stay enabled by default.
@@ -87,9 +89,10 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 	return opts, nil
 }
 
-func deduplicationKeys(value attr.Value) ([]string, error) {
+// propertyPaths parses an option that lists dot-separated property paths.
+func propertyPaths(name string, value attr.Value) ([]string, error) {
 	if value.IsNull() || value.IsUnknown() {
-		return nil, errors.New("options.deduplication_keys is null or unknown")
+		return nil, fmt.Errorf("options.%s is null or unknown", name)
 	}
 	var elements []attr.Value
 	switch list := value.(type) {
@@ -98,17 +101,17 @@ func deduplicationKeys(value attr.Value) ([]string, error) {
 	case types.List:
 		elements = list.Elements()
 	default:
-		return nil, errors.New("options.deduplication_keys is not a list")
+		return nil, fmt.Errorf("options.%s is not a list", name)
 	}
 	var keys []string
 	for _, element := range elements {
 		key, ok := element.(types.String)
 		if !ok || key.IsNull() || key.IsUnknown() {
-			return nil, errors.New("options.deduplication_keys has an element that is not a known string")
+			return nil, fmt.Errorf("options.%s has an element that is not a known string", name)
 		}
 		for _, part := range strings.Split(key.ValueString(), ".") {
 			if strings.TrimSpace(part) == "" {
-				return nil, fmt.Errorf("options.deduplication_keys has a path with an empty segment: %q", key.ValueString())
+				return nil, fmt.Errorf("options.%s has a path with an empty segment: %q", name, key.ValueString())
 			}
 		}
 		keys = append(keys, key.ValueString())

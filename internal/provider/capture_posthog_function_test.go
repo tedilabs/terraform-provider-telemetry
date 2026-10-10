@@ -333,7 +333,7 @@ func TestCollectionOptionDefaults(t *testing.T) {
 		types.DynamicValue(types.MapValueMust(types.BoolType, map[string]attr.Value{})),
 	} {
 		opts, err := collectionOptions(value)
-		if err != nil || opts.collect != want || !opts.cacheEnabled || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 0 {
+		if err != nil || opts.collect != want || !opts.cacheEnabled || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 0 || len(opts.identityKeys) != 0 {
 			t.Fatalf("unexpected defaults for %v: %+v, err=%v", value, opts, err)
 		}
 	}

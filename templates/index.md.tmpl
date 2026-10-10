@@ -51,6 +51,7 @@ Use these functions only for best-effort usage telemetry, never for auditing or 
 !> **Warning:** By default, the functions collect metadata that identifies people or machines, such as the hostname, the public IP address, and the Git remote URL. Disable the collectors you do not need. The [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide lists every property and its source.
 
 Every metadata collector except `github` is enabled by default. Set a collector to `false` in `options` to disable it.
+PostHog does not attribute events to the same user unless `identity_keys` is set in `options`.
 To add telemetry to a module that others use, follow the
 [Using Telemetry in Modules](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/using-in-modules) guide.
 

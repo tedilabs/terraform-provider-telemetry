@@ -75,6 +75,9 @@ check "telemetry" {
         cache_enabled         = true
         deduplication_enabled = true
         deduplication_keys    = []
+
+        # Event identity.
+        identity_keys = []
       },
       # extra_data: additional event properties.
       {

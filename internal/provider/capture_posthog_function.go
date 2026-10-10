@@ -96,7 +96,11 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 		skipCapture(ctx, "an identical event was already sent by this provider process")
 		return
 	}
-	if err := telemetry.CapturePostHog(ctx, conn, properties, f.providerVersion); err != nil {
+	distinctID := telemetry.IdentityID(properties, opts.identityKeys)
+	if distinctID == "" && len(opts.identityKeys) > 0 {
+		tflog.Debug(ctx, "Using a random distinct ID because a path in identity_keys is missing")
+	}
+	if err := telemetry.CapturePostHog(ctx, conn, distinctID, properties, f.providerVersion); err != nil {
 		tflog.Debug(ctx, "Failed to send telemetry event", map[string]any{"error": err.Error()})
 		return
 	}
