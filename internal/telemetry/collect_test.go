@@ -72,6 +72,23 @@ func TestCollectorsAreIndependentAndFilterSensitiveData(t *testing.T) {
 	}
 }
 
+func TestGitOmitsDetachedHead(t *testing.T) {
+	c := Collector{
+		Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
+			return []byte(map[string]string{
+				"rev-parse --show-toplevel":   "/work/infra\n",
+				"rev-parse --abbrev-ref HEAD": "HEAD\n",
+				"rev-parse HEAD":              "abc123\n",
+			}[strings.Join(args, " ")]), nil
+		},
+		Getenv: func(string) string { return "" },
+	}
+	git := c.Collect(context.Background(), Options{Git: true}, false)["git"].(map[string]any)
+	if _, ok := git["branch"]; ok || git["commit"] != "abc123" {
+		t.Fatalf("detached HEAD reported as a branch: %v", git)
+	}
+}
+
 func TestUnavailableCollectorsAreOmitted(t *testing.T) {
 	c := Collector{
 		Run:    func(context.Context, string, ...string) ([]byte, error) { return nil, errors.New("unavailable") },
@@ -108,6 +125,12 @@ func TestSanitizeRemote(t *testing.T) {
 		"/home/user/private/repo":                                 "",
 		"file:///home/user/private/repo":                          "",
 		"https://bad%host/repo":                                   "",
+		// Local paths with a colon: Git reads the SCP-like syntax only without a slash before the first colon.
+		"C:/Users/user/private/repo": "",
+		`C:\Users\user\private\repo`: "",
+		"./private:repo":             "",
+		"../user@host:repo":          "",
+		":repo":                      "",
 	} {
 		if got := sanitizeRemote(input); !reflect.DeepEqual(got, want) {
 			t.Errorf("sanitizeRemote(%q) = %q, want %q", input, got, want)

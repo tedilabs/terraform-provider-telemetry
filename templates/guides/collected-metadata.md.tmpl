@@ -57,10 +57,10 @@ and can differ from the address PostHog observes. Local network interfaces are n
 Collected from the Git repository that contains the working directory of Terraform.
 
 - `name` (String) Name of the repository root directory.
-- `branch` (String) Current branch.
+- `branch` (String) Current branch. Omitted when `HEAD` is detached, for example after checking out a commit or a tag.
 - `commit` (String) Current commit SHA.
 - `remote` (String) URL of the `origin` remote, without user information, query, or fragment.
-  Remotes on the local file system are omitted.
+  Remotes on the local file system, including Windows paths such as `C:/repositories/example`, are omitted.
 
 <a id="github"></a>
 ## github
