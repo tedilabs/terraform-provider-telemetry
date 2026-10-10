@@ -1,5 +1,6 @@
 [tools]
 "github:hashicorp/terraform-plugin-docs" = "0.25.0"
+go = "1.27.2"
 terraform = "1.16.5"
 
 [settings]
