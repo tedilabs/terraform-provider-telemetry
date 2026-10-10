@@ -89,6 +89,8 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 		skipCapture(ctx, "the time limit was reached while collecting metadata")
 		return
 	}
+	// Pseudonyms are scoped to the PostHog project. Deduplication and identity_keys use the pseudonyms.
+	properties = telemetry.Pseudonymize(properties, opts.pseudonymizedKeys, conn.ProjectToken)
 	if opts.deduplicationEnabled && !processDeduplicator.Allow(
 		[]string{"capture_posthog", strings.TrimRight(conn.Host, "/"), conn.ProjectToken},
 		properties, opts.deduplicationKeys,

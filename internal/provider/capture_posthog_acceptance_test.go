@@ -2,6 +2,9 @@ package provider_test
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -246,7 +249,7 @@ func (c *captureCheck) check(checks []tfjson.CheckResultStatic) error {
 			"items": []any{"a", json.Number("2")}, "workspace": "default",
 			"machine.os.version": "acceptance-override", "terraform.workspace": "default",
 			"terraform.in_automation": nil, "terraform.cli": "terraform", "toolchain.telemetry_provider": "dev",
-			"git.name": c.gitName, "git.remote": "https://example.invalid/demo/infra.git", "git.branch": "main",
+			"git.name": c.gitName, "git.remote": "https://example.invalid/demo/infra.git", "git.branch": pseudonym("acceptance-only", "main"),
 		} {
 			if got := property(path); !reflect.DeepEqual(got, want) {
 				return fmt.Errorf("%s: got %#v, want %#v", path, got, want)
@@ -269,4 +272,10 @@ func (c *captureCheck) check(checks []tfjson.CheckResultStatic) error {
 		return fmt.Errorf("unexpected module captures: %v", groups)
 	}
 	return nil
+}
+
+func pseudonym(token, value string) string {
+	mac := hmac.New(sha256.New, []byte(token))
+	mac.Write([]byte(value))
+	return hex.EncodeToString(mac.Sum(nil)[:16])
 }

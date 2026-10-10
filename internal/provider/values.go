@@ -24,6 +24,7 @@ type captureOptions struct {
 	cacheEnabled         bool
 	deduplicationEnabled bool
 	deduplicationKeys    []string
+	pseudonymizedKeys    []string
 	identityKeys         []string
 }
 
@@ -33,7 +34,7 @@ func optionsParameter() function.DynamicParameter {
 	// requires every declared attribute and cannot express these defaults.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		MarkdownDescription: "Object or map that selects metadata collectors and configures caching, deduplication, and the event identity. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `hcp_terraform`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` and `identity_keys` default to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
+		MarkdownDescription: "Object or map that selects metadata collectors and configures caching, deduplication, pseudonymization, and the event identity. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `hcp_terraform`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys`, `pseudonymized_keys`, and `identity_keys` default to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
 	}
 }
 
@@ -65,7 +66,9 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 		"terraform": &opts.collect.Terraform, "toolchain": &opts.collect.Toolchain,
 		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
 	}
-	paths := map[string]*[]string{"deduplication_keys": &opts.deduplicationKeys, "identity_keys": &opts.identityKeys}
+	paths := map[string]*[]string{
+		"deduplication_keys": &opts.deduplicationKeys, "pseudonymized_keys": &opts.pseudonymizedKeys, "identity_keys": &opts.identityKeys,
+	}
 	for key, value := range attributes {
 		if target, ok := paths[key]; ok {
 			keys, err := propertyPaths(key, value)

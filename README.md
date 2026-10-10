@@ -71,10 +71,11 @@ check "telemetry" {
         terraform      = true
         toolchain      = true
 
-        # Caching and deduplication.
+        # Caching, deduplication, and pseudonymization.
         cache_enabled         = true
         deduplication_enabled = true
         deduplication_keys    = []
+        pseudonymized_keys    = []
 
         # Event identity.
         identity_keys = []
