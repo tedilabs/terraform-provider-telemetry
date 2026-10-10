@@ -89,7 +89,9 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 		skipCapture(ctx, "the time limit was reached while collecting metadata")
 		return
 	}
-	// Pseudonyms are scoped to the PostHog project. Deduplication and identity_keys use the pseudonyms.
+	// The distinct ID is derived from the original values, so that pseudonymization does not change it.
+	distinctID := telemetry.IdentityID(properties, opts.identityKeys, conn.ProjectToken)
+	// Pseudonyms are scoped to the PostHog project. Deduplication compares the pseudonyms.
 	properties = telemetry.Pseudonymize(properties, opts.pseudonymizedKeys, conn.ProjectToken)
 	if opts.deduplicationEnabled && !processDeduplicator.Allow(
 		[]string{"capture_posthog", strings.TrimRight(conn.Host, "/"), conn.ProjectToken},
@@ -98,7 +100,6 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 		skipCapture(ctx, "an identical event was already sent by this provider process")
 		return
 	}
-	distinctID := telemetry.IdentityID(properties, opts.identityKeys)
 	if distinctID == "" && len(opts.identityKeys) > 0 {
 		tflog.Debug(ctx, "Using a random distinct ID because a path in identity_keys is missing")
 	}

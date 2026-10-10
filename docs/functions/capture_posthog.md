@@ -219,7 +219,8 @@ The same value has the same pseudonym in every event sent to the same PostHog pr
 so you can still count distinct hosts, repositories, or users without receiving the values.
 In a project with a different token, the same value has a different pseudonym.
 Pseudonymization applies to the final event properties, including `extra_data`,
-before [deduplication](#event-deduplication) and the [distinct ID](#distinct-id), which use the pseudonyms.
+before [deduplication](#event-deduplication), which compares the pseudonyms.
+The [distinct ID](#distinct-id) is derived from the original values, so enabling pseudonymization does not change it.
 
 ~> **Note:** Pseudonyms are not anonymous. Anyone who knows the project token, including everyone who can read a module that contains it and everyone who can read the events, can test guesses of the original values. Values with few possibilities, such as branch names or well-known repository URLs, can be recovered by trying them all. To keep a value from being sent at all, disable its collector.
 
@@ -240,11 +241,15 @@ to the paths of the properties that identify it. The `distinct_id` then becomes 
 
 * Paths use the syntax of `deduplication_keys`, and select the event properties after merging `extra_data`.
   The selected collectors must be enabled.
-* The `distinct_id` is the first 128 bits of the SHA-256 hash of the paths and their values, in hexadecimal.
-  The order of the paths does not matter.
+* The `distinct_id` is the HMAC-SHA256 of the paths and their values, keyed by the project token,
+  truncated to 16 bytes and written as 32 lowercase hexadecimal characters. The order of the paths does not matter.
+* The values are the original values, before [pseudonymization](#pseudonymization), so the same Git remote
+  has the same `distinct_id` whether or not pseudonymization is enabled. In a project with a different token,
+  it has a different `distinct_id`.
 * If a selected path is missing, for example when the working directory is not in a Git repository,
   the event has a random UUID as its `distinct_id`.
-* The hash reveals nothing that the selected properties do not already contain, but it links the events that share these values.
+* Like a pseudonym, the `distinct_id` reveals the selected values only to someone who knows the project token and tests guesses.
+  It links the events that share these values.
 
 Events are still sent without person profiles, so PostHog features that require them,
 such as person properties, cohorts, and Lifecycle insights, are not available for these events.
