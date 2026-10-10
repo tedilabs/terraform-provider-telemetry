@@ -78,7 +78,7 @@ func TestCaptureFlattensExtraDataAndPreservesTypes(t *testing.T) {
 			return
 		}
 		properties := payload["properties"].(map[string]any)
-		if len(properties) != 9 {
+		if len(properties) != 11 {
 			t.Errorf("unexpected property count: %v", properties)
 		}
 		if _, wrapped := properties["extra_data"]; wrapped {
@@ -377,6 +377,12 @@ func TestTerraformAndToolchainCategories(t *testing.T) {
 		}
 		if props["toolchain"].(map[string]any)["telemetry_provider"] != "test-version" {
 			t.Error("missing build version")
+		}
+		if props["$lib"] != "terraform-provider-telemetry" || props["$lib_version"] != "test-version" {
+			t.Errorf("missing library properties: %v, %v", props["$lib"], props["$lib_version"])
+		}
+		if req.Header.Get("User-Agent") != "terraform-provider-telemetry/test-version" {
+			t.Errorf("unexpected User-Agent: %q", req.Header.Get("User-Agent"))
 		}
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader("{}"))}, nil
 	})

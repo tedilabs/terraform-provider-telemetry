@@ -83,6 +83,7 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 	// Deduplicate the final properties, including overridable PostHog defaults.
 	properties = mergeProperties(map[string]any{
 		"$process_person_profile": false, "$geoip_disable": true,
+		"$lib": "terraform-provider-telemetry", "$lib_version": f.providerVersion,
 	}, properties)
 	if ctx.Err() != nil {
 		skipCapture(ctx, "the time limit was reached while collecting metadata")
@@ -95,7 +96,7 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 		skipCapture(ctx, "an identical event was already sent by this provider process")
 		return
 	}
-	if err := telemetry.CapturePostHog(ctx, conn, properties); err != nil {
+	if err := telemetry.CapturePostHog(ctx, conn, properties, f.providerVersion); err != nil {
 		tflog.Debug(ctx, "Failed to send telemetry event", map[string]any{"error": err.Error()})
 		return
 	}

@@ -19,6 +19,9 @@ func TestPostHogPayload(t *testing.T) {
 		if r.Method != "POST" || r.URL.Path != "/prefix/i/v0/e/" {
 			t.Errorf("unexpected endpoint: %s %s", r.Method, r.URL.Path)
 		}
+		if r.Header.Get("User-Agent") != "terraform-provider-telemetry/test" {
+			t.Errorf("unexpected User-Agent: %q", r.Header.Get("User-Agent"))
+		}
 		var event map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
 			t.Error(err)
@@ -40,7 +43,7 @@ func TestPostHogPayload(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
-	CapturePostHog(context.Background(), PostHogConnection{server.URL + "/prefix/", "test-token"}, map[string]any{"workspace": "test"})
+	CapturePostHog(context.Background(), PostHogConnection{server.URL + "/prefix/", "test-token"}, map[string]any{"workspace": "test"}, "test")
 	if requests.Load() != 1 {
 		t.Fatalf("expected one request, got %d", requests.Load())
 	}
@@ -56,7 +59,7 @@ func TestPostHogDoesNotRetryOrFollowRedirects(t *testing.T) {
 				w.WriteHeader(status)
 			}))
 			defer server.Close()
-			CapturePostHog(context.Background(), PostHogConnection{server.URL, "token"}, nil)
+			CapturePostHog(context.Background(), PostHogConnection{server.URL, "token"}, nil, "test")
 			if requests.Load() != 1 {
 				t.Fatalf("retried or followed redirect: %d requests", requests.Load())
 			}
@@ -76,7 +79,7 @@ func TestPostHogHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	CapturePostHog(ctx, PostHogConnection{server.URL, "token"}, nil)
+	CapturePostHog(ctx, PostHogConnection{server.URL, "token"}, nil, "test")
 	if time.Since(start) > time.Second {
 		t.Fatal("ignored context timeout")
 	}
@@ -90,7 +93,7 @@ func TestInvalidConnections(t *testing.T) {
 		if connection.Valid() {
 			t.Errorf("unexpected valid connection: %v", connection.Host)
 		}
-		CapturePostHog(context.Background(), connection, nil)
+		CapturePostHog(context.Background(), connection, nil, "test")
 	}
 }
 
@@ -100,13 +103,13 @@ func TestPostHogReportsDeliveryResult(t *testing.T) {
 		http.StatusBadRequest: true, http.StatusInternalServerError: true, http.StatusTemporaryRedirect: true,
 	} {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status) }))
-		err := CapturePostHog(context.Background(), PostHogConnection{server.URL, "token"}, nil)
+		err := CapturePostHog(context.Background(), PostHogConnection{server.URL, "token"}, nil, "test")
 		server.Close()
 		if (err != nil) != wantErr {
 			t.Errorf("status %d: unexpected error %v", status, err)
 		}
 	}
-	if err := CapturePostHog(context.Background(), PostHogConnection{"", "token"}, nil); err == nil {
+	if err := CapturePostHog(context.Background(), PostHogConnection{"", "token"}, nil, "test"); err == nil {
 		t.Error("invalid connection did not return an error")
 	}
 }
