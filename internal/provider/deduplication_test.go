@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -119,20 +120,23 @@ func TestCaptureDeduplicationMissingKeysAndConnections(t *testing.T) {
 }
 
 func TestDeduplicationOptionsValidation(t *testing.T) {
+	invalidPaths := []attr.Value{
+		types.StringValue("module"), types.ListNull(types.StringType), types.ListUnknown(types.StringType),
+		types.TupleValueMust([]attr.Type{types.BoolType}, []attr.Value{types.BoolValue(true)}),
+		types.ListValueMust(types.StringType, []attr.Value{types.StringNull()}),
+		types.ListValueMust(types.StringType, []attr.Value{types.StringUnknown()}),
+		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("")}),
+		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("terraform..workspace")}),
+	}
 	for name, values := range map[string][]attr.Value{
 		"deduplication_enabled": {types.BoolNull(), types.BoolUnknown(), types.StringValue("true")},
-		"deduplication_keys": {
-			types.StringValue("module"), types.ListNull(types.StringType), types.ListUnknown(types.StringType),
-			types.TupleValueMust([]attr.Type{types.BoolType}, []attr.Value{types.BoolValue(true)}),
-			types.ListValueMust(types.StringType, []attr.Value{types.StringNull()}),
-			types.ListValueMust(types.StringType, []attr.Value{types.StringUnknown()}),
-			types.ListValueMust(types.StringType, []attr.Value{types.StringValue("")}),
-			types.ListValueMust(types.StringType, []attr.Value{types.StringValue("terraform..workspace")}),
-		},
+		"deduplication_keys":    invalidPaths,
+		"identity_keys":         invalidPaths,
 	} {
 		for _, value := range values {
-			if _, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: value})); err == nil {
-				t.Errorf("accepted invalid %s: %v", name, value)
+			_, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{name: value}))
+			if err == nil || !strings.Contains(err.Error(), "options."+name) {
+				t.Errorf("accepted invalid %s or named another option: %v, %v", name, value, err)
 			}
 		}
 	}
@@ -141,8 +145,12 @@ func TestDeduplicationOptionsValidation(t *testing.T) {
 		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("module")}),
 	} {
 		opts, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"deduplication_keys": keys}))
-		if err != nil || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 1 || opts.deduplicationKeys[0] != "module" {
+		if err != nil || !opts.deduplicationEnabled || len(opts.deduplicationKeys) != 1 || opts.deduplicationKeys[0] != "module" || len(opts.identityKeys) != 0 {
 			t.Fatalf("valid keys were not decoded: %+v", opts)
+		}
+		opts, err = collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"identity_keys": keys}))
+		if err != nil || len(opts.identityKeys) != 1 || opts.identityKeys[0] != "module" || len(opts.deduplicationKeys) != 0 {
+			t.Fatalf("valid identity keys were not decoded: %+v", opts)
 		}
 	}
 }

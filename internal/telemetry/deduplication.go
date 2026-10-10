@@ -20,20 +20,9 @@ type Deduplicator struct {
 func (d *Deduplicator) Allow(scope []string, properties map[string]any, keys []string) bool {
 	selected := properties
 	if len(keys) > 0 {
-		selected = make(map[string]any, len(keys))
-		for _, key := range keys {
-			var value any = properties
-			for _, part := range strings.Split(key, ".") {
-				object, ok := value.(map[string]any)
-				if !ok {
-					return true
-				}
-				value, ok = object[part]
-				if !ok {
-					return true
-				}
-			}
-			selected[key] = value
+		var ok bool
+		if selected, ok = selectPaths(properties, keys); !ok {
+			return true
 		}
 	}
 	// JSON sorts map keys, preserving value types and avoiding delimiter collisions.
@@ -57,4 +46,24 @@ func (d *Deduplicator) Allow(scope []string, properties map[string]any, keys []s
 	}
 	d.seen[key] = struct{}{}
 	return true
+}
+
+// selectPaths returns the values of dot-separated property paths, keyed by path.
+// It returns false if a path is missing.
+func selectPaths(properties map[string]any, paths []string) (map[string]any, bool) {
+	selected := make(map[string]any, len(paths))
+	for _, path := range paths {
+		var value any = properties
+		for _, part := range strings.Split(path, ".") {
+			object, ok := value.(map[string]any)
+			if !ok {
+				return nil, false
+			}
+			if value, ok = object[part]; !ok {
+				return nil, false
+			}
+		}
+		selected[path] = value
+	}
+	return selected, true
 }
