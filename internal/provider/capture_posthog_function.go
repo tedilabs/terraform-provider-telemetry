@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/tedilabs/terraform-provider-telemetry/internal/telemetry"
 )
 
@@ -46,20 +47,32 @@ func (f *CapturePostHogFunction) Definition(_ context.Context, _ function.Defini
 
 func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunRequest, resp *function.RunResponse) {
 	// Set a deterministic result before any optional work. Never expose delivery errors.
+	// Skips and failures are logged at the debug level only, without the project token or event properties.
 	resp.Result = function.NewResultData(types.BoolValue(true))
 	var connection types.Object
 	var options, extra types.Dynamic
-	if req.Arguments.Get(ctx, &connection, &options, &extra) != nil || connection.IsNull() || !fullyKnown(ctx, connection) {
+	if req.Arguments.Get(ctx, &connection, &options, &extra) != nil {
+		skipCapture(ctx, "the arguments cannot be read")
+		return
+	}
+	if connection.IsNull() {
+		skipCapture(ctx, "connection is null")
+		return
+	}
+	if !fullyKnown(ctx, connection) {
+		skipCapture(ctx, "connection contains unknown values")
 		return
 	}
 	var conn telemetry.PostHogConnection
 	if connection.As(ctx, &conn, basetypes.ObjectAsOptions{}).HasError() || !conn.Valid() {
+		skipCapture(ctx, "connection has an invalid host or an empty project token")
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	properties, opts, ok := collectProperties(ctx, options, extra)
-	if !ok {
+	properties, opts, err := collectProperties(ctx, options, extra)
+	if err != nil {
+		skipCapture(ctx, err.Error())
 		return
 	}
 	if opts.collect.Toolchain {
@@ -72,13 +85,23 @@ func (f *CapturePostHogFunction) Run(ctx context.Context, req function.RunReques
 		"$process_person_profile": false, "$geoip_disable": true,
 	}, properties)
 	if ctx.Err() != nil {
+		skipCapture(ctx, "the time limit was reached while collecting metadata")
 		return
 	}
 	if opts.deduplicationEnabled && !processDeduplicator.Allow(
 		[]string{"capture_posthog", strings.TrimRight(conn.Host, "/"), conn.ProjectToken},
 		properties, opts.deduplicationKeys,
 	) {
+		skipCapture(ctx, "an identical event was already sent by this provider process")
 		return
 	}
-	telemetry.CapturePostHog(ctx, conn, properties)
+	if err := telemetry.CapturePostHog(ctx, conn, properties); err != nil {
+		tflog.Debug(ctx, "Failed to send telemetry event", map[string]any{"error": err.Error()})
+		return
+	}
+	tflog.Debug(ctx, "Sent telemetry event")
+}
+
+func skipCapture(ctx context.Context, reason string) {
+	tflog.Debug(ctx, "Skipped telemetry capture", map[string]any{"reason": reason})
 }

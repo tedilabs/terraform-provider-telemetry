@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -31,11 +32,11 @@ func optionsParameter() function.DynamicParameter {
 	// requires every declared attribute and cannot express these defaults.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		MarkdownDescription: "Object or map that selects metadata collectors and configures caching and deduplication. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` defaults to `[]`. A null value skips the capture.",
+		MarkdownDescription: "Object or map that selects metadata collectors and configures caching and deduplication. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` defaults to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
 	}
 }
 
-func collectionOptions(options types.Dynamic) (captureOptions, bool) {
+func collectionOptions(options types.Dynamic) (captureOptions, error) {
 	// Defaults for omitted attributes. GitHub requires an authenticated CLI and
 	// identifies a person, so it is the only collector disabled by default.
 	opts := captureOptions{
@@ -46,7 +47,7 @@ func collectionOptions(options types.Dynamic) (captureOptions, bool) {
 	}
 	// A typed null or unknown object has no attributes and must not fall back to the defaults.
 	if options.IsUnderlyingValueNull() || options.IsUnderlyingValueUnknown() {
-		return opts, false
+		return opts, errors.New("options is null or unknown")
 	}
 	var attributes map[string]attr.Value
 	switch value := options.UnderlyingValue().(type) {
@@ -55,78 +56,96 @@ func collectionOptions(options types.Dynamic) (captureOptions, bool) {
 	case types.Map:
 		attributes = value.Elements()
 	default:
-		return opts, false
+		return opts, errors.New("options is not an object or a map")
 	}
-	for key, target := range map[string]*bool{
+	flags := map[string]*bool{
 		"machine": &opts.collect.Machine, "network": &opts.collect.Network, "git": &opts.collect.Git,
 		"github": &opts.collect.GitHub, "github_actions": &opts.collect.GitHubActions,
 		"terraform": &opts.collect.Terraform, "toolchain": &opts.collect.Toolchain,
 		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
-	} {
-		if value, exists := attributes[key]; exists {
-			flag, ok := value.(types.Bool)
-			if !ok || flag.IsNull() || flag.IsUnknown() {
-				return opts, false
-			}
-			*target = flag.ValueBool()
-		}
 	}
-	if value, exists := attributes["deduplication_keys"]; exists {
-		if value.IsNull() || value.IsUnknown() {
-			return opts, false
-		}
-		var elements []attr.Value
-		switch list := value.(type) {
-		case types.Tuple:
-			elements = list.Elements()
-		case types.List:
-			elements = list.Elements()
-		default:
-			return opts, false
-		}
-		for _, element := range elements {
-			key, ok := element.(types.String)
-			if !ok || key.IsNull() || key.IsUnknown() {
-				return opts, false
+	for key, value := range attributes {
+		if key == "deduplication_keys" {
+			keys, err := deduplicationKeys(value)
+			if err != nil {
+				return opts, err
 			}
-			for _, part := range strings.Split(key.ValueString(), ".") {
-				if strings.TrimSpace(part) == "" {
-					return opts, false
-				}
-			}
-			opts.deduplicationKeys = append(opts.deduplicationKeys, key.ValueString())
+			opts.deduplicationKeys = keys
+			continue
 		}
+		// Reject unknown attributes, so that a misspelled collector cannot stay enabled by default.
+		target, known := flags[key]
+		if !known {
+			return opts, fmt.Errorf("options has an unknown attribute %q", key)
+		}
+		flag, ok := value.(types.Bool)
+		if !ok || flag.IsNull() || flag.IsUnknown() {
+			return opts, fmt.Errorf("options.%s is not a known boolean", key)
+		}
+		*target = flag.ValueBool()
 	}
-	return opts, true
+	return opts, nil
 }
 
-func collectProperties(ctx context.Context, options types.Dynamic, extra types.Dynamic) (map[string]any, captureOptions, bool) {
-	if options.IsNull() || !fullyKnown(ctx, options) || !fullyKnown(ctx, extra) {
-		return nil, captureOptions{}, false
+func deduplicationKeys(value attr.Value) ([]string, error) {
+	if value.IsNull() || value.IsUnknown() {
+		return nil, errors.New("options.deduplication_keys is null or unknown")
 	}
-	opts, ok := collectionOptions(options)
-	if !ok {
-		return nil, captureOptions{}, false
+	var elements []attr.Value
+	switch list := value.(type) {
+	case types.Tuple:
+		elements = list.Elements()
+	case types.List:
+		elements = list.Elements()
+	default:
+		return nil, errors.New("options.deduplication_keys is not a list")
+	}
+	var keys []string
+	for _, element := range elements {
+		key, ok := element.(types.String)
+		if !ok || key.IsNull() || key.IsUnknown() {
+			return nil, errors.New("options.deduplication_keys has an element that is not a known string")
+		}
+		for _, part := range strings.Split(key.ValueString(), ".") {
+			if strings.TrimSpace(part) == "" {
+				return nil, fmt.Errorf("options.deduplication_keys has a path with an empty segment: %q", key.ValueString())
+			}
+		}
+		keys = append(keys, key.ValueString())
+	}
+	return keys, nil
+}
+
+func collectProperties(ctx context.Context, options types.Dynamic, extra types.Dynamic) (map[string]any, captureOptions, error) {
+	if options.IsNull() {
+		return nil, captureOptions{}, errors.New("options is null")
+	}
+	if !fullyKnown(ctx, options) || !fullyKnown(ctx, extra) {
+		return nil, captureOptions{}, errors.New("options or extra_data contains unknown values")
+	}
+	opts, err := collectionOptions(options)
+	if err != nil {
+		return nil, captureOptions{}, err
 	}
 	extraData := map[string]any{}
 	if !extra.IsNull() && !extra.IsUnderlyingValueNull() {
 		v, err := extra.UnderlyingValue().ToTerraformValue(ctx)
 		if err != nil {
-			return nil, captureOptions{}, false
+			return nil, captureOptions{}, err
 		}
 		decoded, err := jsonValue(v)
 		if err != nil {
-			return nil, captureOptions{}, false
+			return nil, captureOptions{}, err
 		}
 		var ok bool
 		extraData, ok = decoded.(map[string]any)
 		if !ok {
-			return nil, captureOptions{}, false
+			return nil, captureOptions{}, errors.New("extra_data is not an object or a map")
 		}
 	}
 	properties := processCollector.Collect(ctx, opts.collect, opts.cacheEnabled)
 	properties = mergeProperties(properties, extraData)
-	return properties, opts, true
+	return properties, opts, nil
 }
 
 // Objects merge recursively. Other values (including lists and null) are

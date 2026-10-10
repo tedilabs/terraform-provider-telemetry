@@ -93,3 +93,20 @@ func TestInvalidConnections(t *testing.T) {
 		CapturePostHog(context.Background(), connection, nil)
 	}
 }
+
+func TestPostHogReportsDeliveryResult(t *testing.T) {
+	for status, wantErr := range map[int]bool{
+		http.StatusOK: false, http.StatusNoContent: false,
+		http.StatusBadRequest: true, http.StatusInternalServerError: true, http.StatusTemporaryRedirect: true,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status) }))
+		err := CapturePostHog(context.Background(), PostHogConnection{server.URL, "token"}, nil)
+		server.Close()
+		if (err != nil) != wantErr {
+			t.Errorf("status %d: unexpected error %v", status, err)
+		}
+	}
+	if err := CapturePostHog(context.Background(), PostHogConnection{"", "token"}, nil); err == nil {
+		t.Error("invalid connection did not return an error")
+	}
+}
