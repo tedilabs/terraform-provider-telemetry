@@ -249,7 +249,9 @@ func (c *captureCheck) check(checks []tfjson.CheckResultStatic) error {
 			"items": []any{"a", json.Number("2")}, "workspace": "default",
 			"machine.os.version": "acceptance-override", "terraform.workspace": "default",
 			"terraform.in_automation": nil, "terraform.cli": "terraform", "toolchain.telemetry_provider": "dev",
-			"git.name": c.gitName, "git.remote": "https://example.invalid/demo/infra.git", "git.branch": pseudonym("acceptance-only", "main"),
+			// The pseudonym of the remote URL is of the URL without credentials.
+			"git.name": pseudonym("acceptance-only", c.gitName), "git.remote": pseudonym("acceptance-only", "https://example.invalid/demo/infra.git"),
+			"git.branch": pseudonym("acceptance-only", "main"),
 		} {
 			if got := property(path); !reflect.DeepEqual(got, want) {
 				return fmt.Errorf("%s: got %#v, want %#v", path, got, want)

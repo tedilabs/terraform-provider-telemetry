@@ -24,7 +24,7 @@ type captureOptions struct {
 	cacheEnabled         bool
 	deduplicationEnabled bool
 	deduplicationKeys    []string
-	pseudonymizedKeys    []string
+	pseudonymizedKeys    []string // Empty unless pseudonymization is enabled.
 	identityKeys         []string
 }
 
@@ -34,7 +34,7 @@ func optionsParameter() function.DynamicParameter {
 	// requires every declared attribute and cannot express these defaults.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		MarkdownDescription: "Object or map that selects metadata collectors and configures caching, deduplication, pseudonymization, and the event identity. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `hcp_terraform`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys`, `pseudonymized_keys`, and `identity_keys` default to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
+		MarkdownDescription: "Object or map that selects metadata collectors and configures caching, deduplication, pseudonymization, and the event identity. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `hcp_terraform`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, `deduplication_keys` and `identity_keys` default to `[]`, and `pseudonymization` defaults to `{ enabled = false, additional_keys = [] }`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
 	}
 }
 
@@ -51,13 +51,8 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 	if options.IsUnderlyingValueNull() || options.IsUnderlyingValueUnknown() {
 		return opts, errors.New("options is null or unknown")
 	}
-	var attributes map[string]attr.Value
-	switch value := options.UnderlyingValue().(type) {
-	case types.Object:
-		attributes = value.Attributes()
-	case types.Map:
-		attributes = value.Elements()
-	default:
+	attributes, ok := objectAttributes(options.UnderlyingValue())
+	if !ok {
 		return opts, errors.New("options is not an object or a map")
 	}
 	flags := map[string]*bool{
@@ -66,10 +61,16 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 		"terraform": &opts.collect.Terraform, "toolchain": &opts.collect.Toolchain,
 		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
 	}
-	paths := map[string]*[]string{
-		"deduplication_keys": &opts.deduplicationKeys, "pseudonymized_keys": &opts.pseudonymizedKeys, "identity_keys": &opts.identityKeys,
-	}
+	paths := map[string]*[]string{"deduplication_keys": &opts.deduplicationKeys, "identity_keys": &opts.identityKeys}
 	for key, value := range attributes {
+		if key == "pseudonymization" {
+			keys, err := pseudonymizationKeys(value)
+			if err != nil {
+				return opts, err
+			}
+			opts.pseudonymizedKeys = keys
+			continue
+		}
 		if target, ok := paths[key]; ok {
 			keys, err := propertyPaths(key, value)
 			if err != nil {
@@ -90,6 +91,56 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 		*target = flag.ValueBool()
 	}
 	return opts, nil
+}
+
+func objectAttributes(value attr.Value) (map[string]attr.Value, bool) {
+	switch object := value.(type) {
+	case types.Object:
+		return object.Attributes(), true
+	case types.Map:
+		return object.Elements(), true
+	}
+	return nil, false
+}
+
+// pseudonymizationKeys returns the paths to pseudonymize: none when disabled, or
+// the predefined collected properties followed by additional_keys.
+func pseudonymizationKeys(value attr.Value) ([]string, error) {
+	if value.IsNull() || value.IsUnknown() {
+		return nil, errors.New("options.pseudonymization is null or unknown")
+	}
+	attributes, ok := objectAttributes(value)
+	if !ok {
+		return nil, errors.New("options.pseudonymization is not an object or a map")
+	}
+	var enabled bool
+	var additional []string
+	for key, value := range attributes {
+		switch key {
+		case "enabled":
+			flag, ok := value.(types.Bool)
+			if !ok || flag.IsNull() || flag.IsUnknown() {
+				return nil, errors.New("options.pseudonymization.enabled is not a known boolean")
+			}
+			enabled = flag.ValueBool()
+		case "additional_keys":
+			keys, err := propertyPaths("pseudonymization.additional_keys", value)
+			if err != nil {
+				return nil, err
+			}
+			additional = keys
+		default:
+			return nil, fmt.Errorf("options.pseudonymization has an unknown attribute %q", key)
+		}
+	}
+	if !enabled {
+		// Skip rather than send the values that the configuration lists for pseudonymization.
+		if len(additional) > 0 {
+			return nil, errors.New("options.pseudonymization.additional_keys is set, but enabled is not true")
+		}
+		return nil, nil
+	}
+	return append(telemetry.PseudonymizedProperties(), additional...), nil
 }
 
 // propertyPaths parses an option that lists dot-separated property paths.

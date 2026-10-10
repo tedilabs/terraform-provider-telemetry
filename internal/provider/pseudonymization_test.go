@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -18,7 +19,23 @@ import (
 	"github.com/tedilabs/terraform-provider-telemetry/internal/telemetry"
 )
 
-func TestCapturePseudonymizesSelectedProperties(t *testing.T) {
+func pseudonymization(attributes map[string]attr.Value) types.Object {
+	attributeTypes := map[string]attr.Type{}
+	for key, value := range attributes {
+		attributeTypes[key] = value.Type(context.Background())
+	}
+	return types.ObjectValueMust(attributeTypes, attributes)
+}
+
+func stringList(values ...string) types.List {
+	elements := make([]attr.Value, len(values))
+	for i, value := range values {
+		elements[i] = types.StringValue(value)
+	}
+	return types.ListValueMust(types.StringType, elements)
+}
+
+func TestCapturePseudonymizesProperties(t *testing.T) {
 	resetDeduplication(t)
 	original := processCollector
 	processCollector = telemetry.NewCollector()
@@ -28,73 +45,95 @@ func TestCapturePseudonymizesSelectedProperties(t *testing.T) {
 	if err != nil {
 		t.Skip("no host name: ", err)
 	}
-	events := make(chan string, 2)
+	events := make(chan string, 3)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		events <- string(body)
 	}))
 	defer server.Close()
-	keys := types.TupleValueMust(
-		[]attr.Type{types.StringType, types.StringType, types.StringType},
-		[]attr.Value{types.StringValue("network.hostname"), types.StringValue("network.public_ip"), types.StringValue("module.version")},
-	)
-	pseudonymized := optionsWithAttributes(disabledOptions(), map[string]attr.Value{"network": types.BoolValue(true), "pseudonymized_keys": keys})
-	raw := optionsWithAttributes(disabledOptions(), map[string]attr.Value{"network": types.BoolValue(true)})
+	options := func(settings map[string]attr.Value) types.Dynamic {
+		attributes := map[string]attr.Value{"network": types.BoolValue(true)}
+		if settings != nil {
+			attributes["pseudonymization"] = pseudonymization(settings)
+		}
+		return optionsWithAttributes(disabledOptions(), attributes)
+	}
 	extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{"module": types.StringType}, map[string]attr.Value{"module": types.StringValue("vpc")}))
-	runCapture(t, context.Background(), connectionValue(server.URL), pseudonymized, extra)
-	runCapture(t, context.Background(), connectionValue(server.URL), raw, extra)
+	runCapture(t, context.Background(), connectionValue(server.URL),
+		options(map[string]attr.Value{"enabled": types.BoolValue(true), "additional_keys": stringList("module", "module.version")}), extra)
+	runCapture(t, context.Background(), connectionValue(server.URL), options(nil), extra)
+	// Listed keys without enabled = true skip the capture instead of sending the values.
+	runCapture(t, context.Background(), connectionValue(server.URL), options(map[string]attr.Value{"additional_keys": stringList("module")}), extra)
 	if len(events) != 2 {
 		t.Fatalf("expected two events, got %d", len(events))
 	}
 	bodies := []string{<-events, <-events}
-	if strings.Contains(bodies[0], "203.0.113.7") || strings.Contains(bodies[0], `"`+hostname+`"`) {
-		t.Fatalf("the event contains a pseudonymized value: %s", bodies[0])
-	}
-	network := func(body string) map[string]any {
+	properties := func(body string) map[string]any {
 		var payload struct{ Properties map[string]any }
 		if err := json.Unmarshal([]byte(body), &payload); err != nil {
 			t.Fatal(err)
 		}
-		return payload.Properties["network"].(map[string]any)
+		return payload.Properties
 	}
 	pseudonym := func(value string) string {
 		mac := hmac.New(sha256.New, []byte("test-token"))
 		mac.Write([]byte(value))
 		return hex.EncodeToString(mac.Sum(nil)[:16])
 	}
-	if got := network(bodies[0]); got["hostname"] != pseudonym(hostname) || got["public_ip"] != pseudonym("203.0.113.7") {
+	if strings.Contains(bodies[0], `"`+hostname+`"`) || strings.Contains(bodies[0], `"vpc"`) {
+		t.Fatalf("the event contains a pseudonymized value: %s", bodies[0])
+	}
+	got := properties(bodies[0])
+	network := got["network"].(map[string]any)
+	if network["hostname"] != pseudonym(hostname) || got["module"] != pseudonym("vpc") {
 		t.Fatalf("unexpected pseudonyms: %v", got)
 	}
-	if !strings.Contains(bodies[0], `"module":"vpc"`) {
-		t.Fatal("a path through a non-object value changed the event")
+	// The public IP address is not a predefined pseudonymized property.
+	if network["public_ip"] != "203.0.113.7" {
+		t.Fatalf("public IP address changed: %v", network)
 	}
 	// Pseudonymization does not change the cached metadata of later calls.
-	if got := network(bodies[1]); got["hostname"] != hostname || got["public_ip"] != "203.0.113.7" {
+	if got := properties(bodies[1]); got["network"].(map[string]any)["hostname"] != hostname || got["module"] != "vpc" {
 		t.Fatalf("the cached metadata was pseudonymized: %v", got)
 	}
 }
 
-func TestPseudonymizedKeysOptionsValidation(t *testing.T) {
+func TestPseudonymizationOptionsValidation(t *testing.T) {
 	for _, value := range []attr.Value{
-		types.StringValue("network.hostname"), types.ListNull(types.StringType), types.ListUnknown(types.StringType),
-		types.TupleValueMust([]attr.Type{types.BoolType}, []attr.Value{types.BoolValue(true)}),
-		types.ListValueMust(types.StringType, []attr.Value{types.StringNull()}),
-		types.ListValueMust(types.StringType, []attr.Value{types.StringUnknown()}),
-		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("")}),
-		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("network..hostname")}),
+		types.StringValue("enabled"),
+		types.ObjectNull(map[string]attr.Type{"enabled": types.BoolType}),
+		types.ObjectUnknown(map[string]attr.Type{"enabled": types.BoolType}),
+		pseudonymization(map[string]attr.Value{"enabled": types.BoolNull()}),
+		pseudonymization(map[string]attr.Value{"enabled": types.BoolUnknown()}),
+		pseudonymization(map[string]attr.Value{"enabled": types.StringValue("true")}),
+		pseudonymization(map[string]attr.Value{"enabeld": types.BoolValue(true)}),
+		pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(true), "additional_keys": types.StringValue("module")}),
+		pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(true), "additional_keys": types.ListNull(types.StringType)}),
+		pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(true), "additional_keys": stringList("network..hostname")}),
+		pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(false), "additional_keys": stringList("module")}),
+		pseudonymization(map[string]attr.Value{"additional_keys": stringList("module")}),
 	} {
-		_, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"pseudonymized_keys": value}))
-		if err == nil || !strings.Contains(err.Error(), "options.pseudonymized_keys") {
-			t.Errorf("accepted invalid pseudonymized_keys %v: %v", value, err)
+		_, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"pseudonymization": value}))
+		if err == nil || !strings.Contains(err.Error(), "options.pseudonymization") {
+			t.Errorf("accepted invalid pseudonymization %v: %v", value, err)
 		}
 	}
-	for _, keys := range []attr.Value{
-		types.TupleValueMust([]attr.Type{types.StringType}, []attr.Value{types.StringValue("network.hostname")}),
-		types.ListValueMust(types.StringType, []attr.Value{types.StringValue("network.hostname")}),
+	predefined := telemetry.PseudonymizedProperties()
+	for _, test := range []struct {
+		value attr.Value
+		want  []string
+	}{
+		{pseudonymization(map[string]attr.Value{}), nil},
+		{pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(false), "additional_keys": stringList()}), nil},
+		{pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(true)}), predefined},
+		{types.MapValueMust(types.BoolType, map[string]attr.Value{"enabled": types.BoolValue(true)}), predefined},
+		{pseudonymization(map[string]attr.Value{
+			"enabled": types.BoolValue(true), "additional_keys": types.TupleValueMust([]attr.Type{types.StringType}, []attr.Value{types.StringValue("module")}),
+		}), append(telemetry.PseudonymizedProperties(), "module")},
 	} {
-		opts, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"pseudonymized_keys": keys}))
-		if err != nil || len(opts.pseudonymizedKeys) != 1 || opts.pseudonymizedKeys[0] != "network.hostname" || len(opts.deduplicationKeys) != 0 {
-			t.Fatalf("valid keys were not decoded: %+v, %v", opts, err)
+		opts, err := collectionOptions(optionsWithAttributes(disabledOptions(), map[string]attr.Value{"pseudonymization": test.value}))
+		if err != nil || !reflect.DeepEqual(opts.pseudonymizedKeys, test.want) || len(opts.deduplicationKeys) != 0 {
+			t.Errorf("%v: got %v, %v, want %v", test.value, opts.pseudonymizedKeys, err, test.want)
 		}
 	}
 }
@@ -112,8 +151,10 @@ func TestIdentityKeysUsePseudonyms(t *testing.T) {
 		distinctID = payload.DistinctID
 	}))
 	defer server.Close()
-	module := types.ListValueMust(types.StringType, []attr.Value{types.StringValue("module")})
-	options := optionsWithAttributes(disabledOptions(), map[string]attr.Value{"pseudonymized_keys": module, "identity_keys": module})
+	options := optionsWithAttributes(disabledOptions(), map[string]attr.Value{
+		"pseudonymization": pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(true), "additional_keys": stringList("module")}),
+		"identity_keys":    stringList("module"),
+	})
 	extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{"module": types.StringType}, map[string]attr.Value{"module": types.StringValue("vpc")}))
 	runCapture(t, context.Background(), connectionValue(server.URL), options, extra)
 	pseudonymized := telemetry.Pseudonymize(map[string]any{"module": "vpc"}, []string{"module"}, "test-token")

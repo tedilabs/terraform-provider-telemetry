@@ -8,6 +8,26 @@ import (
 	"strings"
 )
 
+// pseudonymizedProperties are the collected properties that name people, machines,
+// repositories, or workspaces. TestPseudonymizedPropertiesAreClassified requires every
+// collected property to be classified, so that new properties are not missed.
+// network.public_ip is left out: a public IPv4 address has so few possible values
+// that a pseudonym does not hide it from anyone who knows the project token.
+var pseudonymizedProperties = []string{
+	"network.hostname",
+	"git.name", "git.remote",
+	"github.login", "github.id", "github.name", "github.html_url",
+	"github_actions.repository", "github_actions.repository_id", "github_actions.repository_owner",
+	"github_actions.actor", "github_actions.actor_id", "github_actions.triggering_actor",
+	"hcp_terraform.workspace_id", "hcp_terraform.workspace_name", "hcp_terraform.workspace_slug",
+}
+
+// PseudonymizedProperties returns the paths of the collected properties that
+// enabled pseudonymization replaces with pseudonyms.
+func PseudonymizedProperties() []string {
+	return append([]string(nil), pseudonymizedProperties...)
+}
+
 // Pseudonymize returns a copy of properties in which the value at each path in
 // keys is replaced with an HMAC-SHA256 pseudonym keyed by secret. Strings are
 // hashed as is, and other values as their JSON encoding. Null values and
