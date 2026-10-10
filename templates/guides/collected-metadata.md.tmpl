@@ -23,6 +23,8 @@ This guide lists the properties of each group and where they come from.
 | [`toolchain`](#toolchain) | `true` | Version commands of tools in `PATH` | None |
 
 Set a collector to `false` in `options` to disable it, and disable the collectors you do not need.
+To replace identifying properties, such as the hostname and the Git remote, with pseudonyms instead,
+set `pseudonymization = { enabled = true }`; see [Pseudonymization](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/functions/capture_posthog#pseudonymization).
 Metadata describes the environment running Terraform: with remote execution, such as HCP Terraform
 or a CI/CD pipeline, it describes the remote runner, not the workstation of the person who started the run.
 

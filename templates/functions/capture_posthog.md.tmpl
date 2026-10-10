@@ -63,8 +63,24 @@ Optional:
   See [Event Deduplication](#event-deduplication). Defaults to `true`.
 - `deduplication_keys` (List of String) Paths of the event properties that identify duplicate events, such as `module` or `machine.os`.
   Defaults to `[]`, which compares all event properties.
+- `pseudonymization` (Object) Replaces identifying event properties with pseudonyms.
+  See [below for nested schema](#nestedobjatt--options--pseudonymization) and [Pseudonymization](#pseudonymization).
+  Defaults to `{ enabled = false, additional_keys = [] }`.
 - `identity_keys` (List of String) Paths of the event properties from which to derive the `distinct_id` of the event, such as `git.remote`.
   See [Distinct ID](#distinct-id). Defaults to `[]`, which sends a random `distinct_id`.
+
+<a id="nestedobjatt--options--pseudonymization"></a>
+### Nested Schema for `options.pseudonymization`
+
+`pseudonymization` accepts an object or a map. All attributes are optional, and any other attribute skips the capture.
+
+Optional:
+
+- `enabled` (Boolean) Whether to replace the [predefined identifying properties](#pseudonymization)
+  and the properties in `additional_keys` with pseudonyms. Defaults to `false`.
+- `additional_keys` (List of String) Paths of other event properties to replace with pseudonyms,
+  such as `git.branch` or an attribute of `extra_data`. Defaults to `[]`.
+  Requires `enabled = true`: otherwise the capture is skipped, so that the listed values are never sent.
 
 ## Return Type
 
@@ -131,6 +147,37 @@ Each enabled collector adds a metadata group, named after its option, to the eve
 Values that are not available are omitted.
 See the [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide for the type, source, and privacy considerations of each property.
 
+<a id="pseudonymization"></a>
+## Pseudonymization
+
+Set `pseudonymization = { enabled = true }` in `options` to replace the following collected properties with pseudonyms:
+
+| Collector | Pseudonymized properties |
+| --- | --- |
+| `network` | `hostname` |
+| `git` | `name`, `remote` |
+| `github` | `login`, `id`, `name`, `html_url` |
+| `github_actions` | `repository`, `repository_id`, `repository_owner`, `actor`, `actor_id`, `triggering_actor` |
+| `hcp_terraform` | `workspace_id`, `workspace_name`, `workspace_slug` |
+
+To pseudonymize other properties too, such as `git.branch` or an attribute of `extra_data`, list their paths in `additional_keys`.
+Paths use the syntax of `deduplication_keys`.
+`network.public_ip` is not pseudonymized: a public IPv4 address has so few possible values that its pseudonym can be reversed
+by trying them all. Disable the `network` collector when the address must not be sent.
+
+A pseudonym is the HMAC-SHA256 of the value, keyed by the project token,
+truncated to 16 bytes and written as 32 lowercase hexadecimal characters.
+Strings are hashed as they are, and other values, including objects and lists, as their JSON encoding.
+Null values and paths that are not in the event are left unchanged.
+
+The same value has the same pseudonym in every event sent to the same PostHog project,
+so you can still count distinct hosts, repositories, or users without receiving the values.
+In a project with a different token, the same value has a different pseudonym.
+Pseudonymization applies to the final event properties, including `extra_data`,
+before [deduplication](#event-deduplication) and the [distinct ID](#distinct-id), which use the pseudonyms.
+
+~> **Note:** Pseudonyms are not anonymous. Anyone who knows the project token, including everyone who can read a module that contains it and everyone who can read the events, can test guesses of the original values. Values with few possibilities, such as branch names or well-known repository URLs, can be recovered by trying them all. To keep a value from being sent at all, disable its collector.
+
 <a id="distinct-id"></a>
 ## Distinct ID
 
@@ -182,8 +229,9 @@ The function never returns an error or a warning. It skips the capture and retur
 * `connection` or `options` is null, `connection.host` is not a valid URL, or `connection.project_token` is empty.
 * An argument contains unknown values, such as attributes of resources that are not created yet.
   A later evaluation with known values can send the event.
-* `options` has an unknown attribute, an attribute of `options` is null or has the wrong type,
-  or a path in `deduplication_keys` or `identity_keys` has an empty segment.
+* `options` or `options.pseudonymization` has an unknown attribute, an attribute is null or has the wrong type,
+  or a path in `deduplication_keys`, `identity_keys`, or `pseudonymization.additional_keys` has an empty segment.
+* `pseudonymization.additional_keys` is not empty, but `pseudonymization.enabled` is not `true`.
 * `extra_data` is not an object or a map.
 
 Terraform still rejects a call with the wrong number of arguments or incompatible argument types before the function runs.

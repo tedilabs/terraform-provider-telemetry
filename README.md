@@ -76,7 +76,11 @@ check "telemetry" {
         deduplication_enabled = true
         deduplication_keys    = []
 
-        # Event identity.
+        # Pseudonymization and event identity.
+        pseudonymization = {
+          enabled         = false
+          additional_keys = []
+        }
         identity_keys = []
       },
       # extra_data: additional event properties.

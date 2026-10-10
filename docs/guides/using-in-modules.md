@@ -121,6 +121,12 @@ without data that identifies people or machines.
 The `network`, `git`, `github`, `github_actions`, `hcp_terraform`, and `terraform` collectors include identifying data;
 see the [Collected Metadata](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/collected-metadata) guide.
 
+To count distinct hosts or repositories without receiving their names, keep the collector
+and set `pseudonymization = { enabled = true }`, which replaces the hostname, the Git remote, and other identifying properties with pseudonyms.
+Every user of the module can read the project token that keys the pseudonyms, and can test guesses of the original values,
+so pseudonyms do not make identifying data anonymous;
+see [Pseudonymization](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/functions/capture_posthog#pseudonymization).
+
 Avoid sending values that users pass to the module, such as names or tags, in `extra_data`.
 
 ## Connection settings

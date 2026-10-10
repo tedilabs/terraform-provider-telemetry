@@ -25,6 +25,11 @@ check "capture" {
         terraform      = true
         toolchain      = true
         cache_enabled  = var.cache_enabled
+        # The project token keys the pseudonyms of git.name, git.remote, and the branch name.
+        pseudonymization = {
+          enabled         = true
+          additional_keys = ["git.branch"]
+        }
       },
       {
         workspace = terraform.workspace
