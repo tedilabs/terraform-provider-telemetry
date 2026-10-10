@@ -111,6 +111,11 @@ pass them in `extra_data` when needed.
 <a id="terraform"></a>
 ## terraform
 
+- `command_id` (String) Identifier of the Terraform or OpenTofu command that started the provider process:
+  a hash of the ID and start time of the parent process, which does not reveal either.
+  The planning and applying phases of one `terraform apply` share it, while separate commands,
+  such as `terraform plan -out` and the `terraform apply` of the saved plan, have different identifiers.
+  Group events by it to count commands instead of events. Omitted on platforms other than Linux, macOS, and Windows.
 - `workspace` (String) Selected Terraform CLI workspace.
 - `workspace_source` (String) Where the workspace was read from: `environment` for the `TF_WORKSPACE` environment variable,
   `data_directory` for the `environment` file in the data directory (`TF_DATA_DIR`, or `.terraform` by default),

@@ -58,6 +58,7 @@ for example `["module", "version"]`. Only the first event is sent, so the other 
 
 Terraform can use a separate provider process for each phase of a command,
 so a command can still send more than one event, for example one when planning and one when applying.
+These events share the same `terraform.command_id`, so you can count commands by counting its distinct values.
 See the [Caching and Deduplication](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs/guides/caching-and-deduplication) guide for details.
 
 ## Choose collectors

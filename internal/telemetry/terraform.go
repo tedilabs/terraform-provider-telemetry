@@ -9,6 +9,11 @@ import (
 
 func (c Collector) terraform() map[string]any {
 	result := map[string]any{}
+	if c.Parent != nil {
+		if parent, ok := c.Parent(); ok {
+			result["command_id"] = commandID(parent)
+		}
+	}
 	if workspace := c.Getenv("TF_WORKSPACE"); workspace != "" {
 		result["workspace"], result["workspace_source"] = workspace, "environment"
 		return result
