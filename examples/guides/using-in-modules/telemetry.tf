@@ -2,7 +2,7 @@ terraform {
   required_providers {
     telemetry = {
       source  = "tedilabs/telemetry"
-      version = ">= 0.1.1"
+      version = ">= 0.1.3"
     }
   }
   # Provider functions require Terraform 1.8 and later.

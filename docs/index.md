@@ -15,7 +15,7 @@ The provider manages no resources or data sources, and has no configuration opti
 connection settings are passed to each function call instead.
 Provider-defined functions require Terraform 1.8 or later.
 
-Use the navigation to the left to read about the available functions.
+Use the navigation to the left to read about the available functions and guides.
 
 ## Example Usage
 
@@ -70,6 +70,7 @@ check "telemetry" {
 
 ~> **Note:** To disable a call, pass a `null` connection as in the example above. Do not wrap the call in a conditional expression such as `var.telemetry_enabled ? provider::telemetry::capture_posthog(...) : true`: Terraform evaluates both results of a conditional expression, so the function still runs and sends the event.
 
+<a id="limitations"></a>
 ## Limitations
 
 ### Side effects

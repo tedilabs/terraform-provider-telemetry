@@ -13,14 +13,14 @@ import (
 
 // Options and Collector are independent of the destination and Terraform SDK.
 type Options struct {
-	Machine       bool `tfsdk:"machine"`
-	Network       bool `tfsdk:"network"`
-	Git           bool `tfsdk:"git"`
-	GitHub        bool `tfsdk:"github"`
-	GitHubActions bool `tfsdk:"github_actions"`
-	HCPTerraform  bool `tfsdk:"hcp_terraform"`
-	Terraform     bool `tfsdk:"terraform"`
-	Toolchain     bool `tfsdk:"toolchain"`
+	Machine       bool
+	Network       bool
+	Git           bool
+	GitHub        bool
+	GitHubActions bool
+	HCPTerraform  bool
+	Terraform     bool
+	Toolchain     bool
 }
 
 type Collector struct {

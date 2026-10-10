@@ -9,7 +9,7 @@ description: |-
 
 Collects the enabled metadata about the environment running Terraform and attempts to send it to [PostHog](https://posthog.com/) as a `terraform_capture` event. The function always returns `true`, whether the event is sent, skipped, deduplicated, or fails to deliver.
 
-~> **Note:** This function runs local commands and sends network requests while Terraform evaluates it, and it does not guarantee that an event is sent exactly once. Read the limitations on the provider overview page before using it.
+~> **Note:** This function runs local commands and sends network requests while Terraform evaluates it, and it does not guarantee that an event is sent exactly once. Read the [limitations](https://registry.terraform.io/providers/tedilabs/telemetry/latest/docs#limitations) on the provider overview page before using it.
 
 ## Example Usage
 
@@ -76,6 +76,7 @@ All arguments are positional and required.
 - `host` (String) PostHog ingestion base URL, such as `https://us.i.posthog.com`, `https://eu.i.posthog.com`,
   or the base URL of a self-hosted instance. The event is sent to the `/i/v0/e/` path under this URL.
   The URL must use `http` or `https`, and must not contain credentials, a query, or a fragment.
+  Use `http` only for a local test server: it sends the project token and the event unencrypted.
 - `project_token` (String) PostHog project token, sent as the `api_key` of the event.
   Do not use a personal API key. Store the token in a `sensitive` variable.
 
