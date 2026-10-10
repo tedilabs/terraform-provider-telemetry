@@ -138,28 +138,51 @@ func TestPseudonymizationOptionsValidation(t *testing.T) {
 	}
 }
 
-func TestIdentityKeysUsePseudonyms(t *testing.T) {
+// Enabling pseudonymization must not change the distinct ID of the same Git remote.
+func TestIdentityKeysIgnorePseudonymization(t *testing.T) {
 	resetDeduplication(t)
-	var distinctID string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct {
-			DistinctID string `json:"distinct_id"`
+	original := processCollector
+	processCollector = telemetry.NewCollector()
+	t.Cleanup(func() { processCollector = original })
+	processCollector.Run = func(_ context.Context, name string, args ...string) ([]byte, error) {
+		return []byte(map[string]string{
+			"rev-parse --show-toplevel":      "/work/infra\n",
+			"config --get remote.origin.url": "https://github.com/acme/infra.git\n",
+			"rev-parse --abbrev-ref HEAD":    "main\n",
+			"rev-parse HEAD":                 "abc123\n",
+		}[strings.Join(args, " ")]), nil
+	}
+	type event struct {
+		DistinctID string `json:"distinct_id"`
+		Properties struct {
+			Git struct{ Remote string }
 		}
+	}
+	events := make(chan event, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload event
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Error(err)
 		}
-		distinctID = payload.DistinctID
+		events <- payload
 	}))
 	defer server.Close()
-	options := optionsWithAttributes(disabledOptions(), map[string]attr.Value{
-		"pseudonymization": pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(true), "additional_keys": stringList("module")}),
-		"identity_keys":    stringList("module"),
-	})
-	extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{"module": types.StringType}, map[string]attr.Value{"module": types.StringValue("vpc")}))
-	runCapture(t, context.Background(), connectionValue(server.URL), options, extra)
-	pseudonymized := telemetry.Pseudonymize(map[string]any{"module": "vpc"}, []string{"module"}, "test-token")
-	want := telemetry.IdentityID(pseudonymized, []string{"module"})
-	if distinctID != want || want == telemetry.IdentityID(map[string]any{"module": "vpc"}, []string{"module"}) {
-		t.Fatalf("distinct ID %q is not derived from the pseudonym, want %q", distinctID, want)
+	extra := types.DynamicValue(types.ObjectValueMust(map[string]attr.Type{}, map[string]attr.Value{}))
+	for _, enabled := range []bool{false, true} {
+		options := optionsWithAttributes(disabledOptions(), map[string]attr.Value{
+			"git":                   types.BoolValue(true),
+			"deduplication_enabled": types.BoolValue(false),
+			"pseudonymization":      pseudonymization(map[string]attr.Value{"enabled": types.BoolValue(enabled)}),
+			"identity_keys":         stringList("git.remote"),
+		})
+		runCapture(t, context.Background(), connectionValue(server.URL), options, extra)
+	}
+	raw, pseudonymized := <-events, <-events
+	if raw.Properties.Git.Remote != "https://github.com/acme/infra.git" || pseudonymized.Properties.Git.Remote == raw.Properties.Git.Remote {
+		t.Fatalf("git.remote was not pseudonymized only when enabled: %q, %q", raw.Properties.Git.Remote, pseudonymized.Properties.Git.Remote)
+	}
+	want := telemetry.IdentityID(map[string]any{"git": map[string]any{"remote": "https://github.com/acme/infra.git"}}, []string{"git.remote"}, "test-token")
+	if raw.DistinctID != want || pseudonymized.DistinctID != want {
+		t.Fatalf("pseudonymization changed the distinct ID: %q, %q, want %q", raw.DistinctID, pseudonymized.DistinctID, want)
 	}
 }

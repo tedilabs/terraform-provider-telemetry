@@ -1,15 +1,16 @@
 package telemetry
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 )
 
 // IdentityID derives a stable distinct ID from the values of the selected
-// property paths. It returns an empty string when no paths are selected or a
-// path is missing.
-func IdentityID(properties map[string]any, keys []string) string {
+// property paths, keyed by secret. It returns an empty string when no paths are
+// selected or a path is missing.
+func IdentityID(properties map[string]any, keys []string, secret string) string {
 	if len(keys) == 0 {
 		return ""
 	}
@@ -23,6 +24,11 @@ func IdentityID(properties map[string]any, keys []string) string {
 	if err != nil {
 		return ""
 	}
-	sum := sha256.Sum256(append([]byte("terraform-provider-telemetry/identity:"), encoded...))
-	return hex.EncodeToString(sum[:16])
+	// Key the hash like a pseudonym. The original values of pseudonymized properties
+	// are then no easier to recover from the ID than from their pseudonyms, and the
+	// ID differs between PostHog projects.
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte("terraform-provider-telemetry/identity:"))
+	mac.Write(encoded)
+	return hex.EncodeToString(mac.Sum(nil)[:16])
 }
