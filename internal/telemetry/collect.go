@@ -171,20 +171,24 @@ func (c Collector) github(ctx context.Context) map[string]any {
 func (c Collector) githubActions() map[string]any {
 	result := map[string]any{}
 	for key, env := range map[string]string{
-		"workflow": "GITHUB_WORKFLOW", "workflow_ref": "GITHUB_WORKFLOW_REF", "workflow_sha": "GITHUB_WORKFLOW_SHA",
-		"job": "GITHUB_JOB", "run_id": "GITHUB_RUN_ID", "run_number": "GITHUB_RUN_NUMBER", "run_attempt": "GITHUB_RUN_ATTEMPT",
+		"workflow": "GITHUB_WORKFLOW", "job": "GITHUB_JOB", "run_number": "GITHUB_RUN_NUMBER", "run_attempt": "GITHUB_RUN_ATTEMPT",
 		"repository": "GITHUB_REPOSITORY", "repository_id": "GITHUB_REPOSITORY_ID", "repository_owner": "GITHUB_REPOSITORY_OWNER",
 		"actor": "GITHUB_ACTOR", "actor_id": "GITHUB_ACTOR_ID", "triggering_actor": "GITHUB_TRIGGERING_ACTOR",
 		"event_name": "GITHUB_EVENT_NAME", "ref": "GITHUB_REF", "sha": "GITHUB_SHA",
 		"head_ref": "GITHUB_HEAD_REF", "base_ref": "GITHUB_BASE_REF", "server_url": "GITHUB_SERVER_URL",
-		"runner_os": "RUNNER_OS", "runner_arch": "RUNNER_ARCH", "runner_environment": "RUNNER_ENVIRONMENT",
 	} {
 		if value := c.Getenv(env); value != "" {
 			result[key] = value
 		}
 	}
-	if server, repo, run := c.Getenv("GITHUB_SERVER_URL"), c.Getenv("GITHUB_REPOSITORY"), c.Getenv("GITHUB_RUN_ID"); server != "" && repo != "" && run != "" {
-		result["run_url"] = strings.TrimRight(server, "/") + "/" + repo + "/actions/runs/" + run
+	runner := map[string]any{}
+	for key, env := range map[string]string{"os": "RUNNER_OS", "arch": "RUNNER_ARCH", "environment": "RUNNER_ENVIRONMENT"} {
+		if value := c.Getenv(env); value != "" {
+			runner[key] = value
+		}
+	}
+	if len(runner) > 0 {
+		result["runner"] = runner
 	}
 	return result
 }

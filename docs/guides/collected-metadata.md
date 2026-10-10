@@ -83,10 +83,7 @@ Each property is read from a default environment variable of GitHub Actions:
 | Property | Environment variable |
 | --- | --- |
 | `workflow` | `GITHUB_WORKFLOW` |
-| `workflow_ref` | `GITHUB_WORKFLOW_REF` |
-| `workflow_sha` | `GITHUB_WORKFLOW_SHA` |
 | `job` | `GITHUB_JOB` |
-| `run_id` | `GITHUB_RUN_ID` |
 | `run_number` | `GITHUB_RUN_NUMBER` |
 | `run_attempt` | `GITHUB_RUN_ATTEMPT` |
 | `repository` | `GITHUB_REPOSITORY` |
@@ -101,11 +98,10 @@ Each property is read from a default environment variable of GitHub Actions:
 | `head_ref` | `GITHUB_HEAD_REF` |
 | `base_ref` | `GITHUB_BASE_REF` |
 | `server_url` | `GITHUB_SERVER_URL` |
-| `runner_os` | `RUNNER_OS` |
-| `runner_arch` | `RUNNER_ARCH` |
-| `runner_environment` | `RUNNER_ENVIRONMENT` |
+| `runner.os` | `RUNNER_OS` |
+| `runner.arch` | `RUNNER_ARCH` |
+| `runner.environment` | `RUNNER_ENVIRONMENT` |
 
-`run_url` is built from `GITHUB_SERVER_URL`, `GITHUB_REPOSITORY`, and `GITHUB_RUN_ID`.
 `job` is the job ID in the workflow file, not a numeric ID. Matrix values are not collected;
 pass them in `extra_data` when needed.
 

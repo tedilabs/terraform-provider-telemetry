@@ -64,11 +64,46 @@ func TestCollectorsAreIndependentAndFilterSensitiveData(t *testing.T) {
 		t.Fatalf("unfiltered user: %v", user)
 	}
 	actions := got["github_actions"].(map[string]any)
-	if actions["job"] != "terraform" || actions["run_url"] != "https://github.com/example/infra/actions/runs/42" {
+	if actions["job"] != "terraform" || actions["repository"] != "example/infra" {
 		t.Fatalf("wrong action metadata: %v", actions)
 	}
 	if _, ok := actions["GITHUB_TOKEN"]; ok {
 		t.Fatal("collected token")
+	}
+}
+
+func TestGitHubActionsMetadata(t *testing.T) {
+	env := map[string]string{
+		"GITHUB_ACTIONS": "true", "GITHUB_WORKFLOW": "Terraform", "GITHUB_JOB": "plan",
+		"GITHUB_RUN_ID": "1234567890", "GITHUB_RUN_NUMBER": "42", "GITHUB_SERVER_URL": "https://github.com",
+		"GITHUB_REPOSITORY": "acme/infra", "GITHUB_WORKFLOW_REF": "acme/infra/.github/workflows/terraform.yaml@refs/heads/main",
+		"GITHUB_WORKFLOW_SHA": "3f2a9c1e", "RUNNER_OS": "Linux", "RUNNER_ARCH": "X64", "RUNNER_ENVIRONMENT": "github-hosted",
+	}
+	c := Collector{Getenv: func(key string) string { return env[key] }}
+	actions := c.Collect(context.Background(), Options{GitHubActions: true}, true)["github_actions"].(map[string]any)
+	for _, key := range []string{"workflow_ref", "workflow_sha", "run_id", "run_url", "runner_os", "runner_arch", "runner_environment"} {
+		if _, ok := actions[key]; ok {
+			t.Errorf("collected %s: %v", key, actions)
+		}
+	}
+	want := map[string]any{"os": "Linux", "arch": "X64", "environment": "github-hosted"}
+	if !reflect.DeepEqual(actions["runner"], want) || actions["run_number"] != "42" || actions["workflow"] != "Terraform" {
+		t.Fatalf("wrong action metadata: %v", actions)
+	}
+	// The cache returns independent copies of the nested runner object.
+	actions["runner"].(map[string]any)["os"] = "changed"
+	if again := c.Collect(context.Background(), Options{GitHubActions: true}, true)["github_actions"].(map[string]any); again["runner"].(map[string]any)["os"] != "Linux" {
+		t.Fatalf("cached runner object was modified: %v", again)
+	}
+	// Runner values that are not available are omitted, and so is an empty runner object.
+	delete(env, "RUNNER_ARCH")
+	delete(env, "RUNNER_ENVIRONMENT")
+	if got := c.Collect(context.Background(), Options{GitHubActions: true}, false)["github_actions"].(map[string]any)["runner"]; !reflect.DeepEqual(got, map[string]any{"os": "Linux"}) {
+		t.Fatalf("unavailable runner values not omitted: %v", got)
+	}
+	delete(env, "RUNNER_OS")
+	if _, ok := c.Collect(context.Background(), Options{GitHubActions: true}, false)["github_actions"].(map[string]any)["runner"]; ok {
+		t.Fatal("empty runner object collected")
 	}
 }
 
