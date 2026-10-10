@@ -245,14 +245,14 @@ func (c *captureCheck) check(checks []tfjson.CheckResultStatic) error {
 			"count": json.Number("9007199254740993"), "nested.enabled": true,
 			"items": []any{"a", json.Number("2")}, "workspace": "default",
 			"machine.os.version": "acceptance-override", "terraform.workspace": "default",
-			"terraform.in_automation": nil, "toolchain.telemetry_provider": "dev",
+			"terraform.in_automation": nil, "terraform.cli": "terraform", "toolchain.telemetry_provider": "dev",
 			"git.name": c.gitName, "git.remote": "https://example.invalid/demo/infra.git", "git.branch": "main",
 		} {
 			if got := property(path); !reflect.DeepEqual(got, want) {
 				return fmt.Errorf("%s: got %#v, want %#v", path, got, want)
 			}
 		}
-		for _, path := range []string{"machine.os.name", "git.commit", "terraform.command_id", "toolchain.terraform", "toolchain.git"} {
+		for _, path := range []string{"machine.os.name", "git.commit", "terraform.command_id", "terraform.cli_version", "toolchain.terraform", "toolchain.git"} {
 			if value, ok := property(path).(string); !ok || value == "" {
 				return fmt.Errorf("missing %s", path)
 			}

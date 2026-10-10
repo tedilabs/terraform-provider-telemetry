@@ -70,7 +70,7 @@ func TestTerraformWorkspaceSources(t *testing.T) {
 			}
 			return []byte(test.file), test.err
 		}
-		got := c.terraform()
+		got := c.terraform(context.Background())
 		if test.workspace == "" {
 			if _, ok := got["workspace"]; ok {
 				t.Fatalf("inferred workspace after failed read: %v", got)

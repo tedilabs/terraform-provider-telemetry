@@ -36,3 +36,8 @@ func parseProcStatStart(stat string) (string, bool) {
 	}
 	return fields[19], true
 }
+
+func processExecutable(pid int) (string, bool) {
+	path, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+	return path, err == nil && path != ""
+}

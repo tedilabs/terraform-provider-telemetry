@@ -8,10 +8,11 @@ import (
 )
 
 // Process identifies a running process. Start distinguishes processes that
-// reuse the same ID over time.
+// reuse the same ID over time. Start and Executable are empty when unavailable.
 type Process struct {
-	ID    int
-	Start string
+	ID         int
+	Start      string
+	Executable string
 }
 
 // parentProcess returns the process that started this provider, which is the
@@ -21,11 +22,10 @@ func parentProcess() (Process, bool) {
 	if pid <= 1 {
 		return Process{}, false
 	}
-	start, ok := processStart(pid)
-	if !ok {
-		return Process{}, false
-	}
-	return Process{ID: pid, Start: start}, true
+	parent := Process{ID: pid}
+	parent.Start, _ = processStart(pid)
+	parent.Executable, _ = processExecutable(pid)
+	return parent, true
 }
 
 // commandID identifies the command run by the parent process without exposing
