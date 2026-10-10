@@ -17,8 +17,8 @@ var _ function.Function = &CapturePostHogFunction{}
 
 type CapturePostHogFunction struct{ providerVersion string }
 
-func NewCapturePostHogFunction() function.Function {
-	return &CapturePostHogFunction{providerVersion: "dev"}
+func NewCapturePostHogFunction(providerVersion string) function.Function {
+	return &CapturePostHogFunction{providerVersion: providerVersion}
 }
 
 func (f *CapturePostHogFunction) Metadata(_ context.Context, _ function.MetadataRequest, resp *function.MetadataResponse) {

@@ -35,7 +35,5 @@ func (p *TelemetryProvider) DataSources(context.Context) []func() datasource.Dat
 	return nil
 }
 func (p *TelemetryProvider) Functions(context.Context) []func() function.Function {
-	return []func() function.Function{func() function.Function {
-		return &CapturePostHogFunction{providerVersion: p.version}
-	}}
+	return []func() function.Function{func() function.Function { return NewCapturePostHogFunction(p.version) }}
 }

@@ -60,7 +60,7 @@ func runCapture(t *testing.T, ctx context.Context, args ...attr.Value) {
 		args[1] = types.DynamicValue(args[1])
 	}
 	resp := function.RunResponse{Result: function.NewResultData(types.BoolUnknown())}
-	NewCapturePostHogFunction().Run(ctx, function.RunRequest{Arguments: function.NewArgumentsData(args)}, &resp)
+	NewCapturePostHogFunction("dev").Run(ctx, function.RunRequest{Arguments: function.NewArgumentsData(args)}, &resp)
 	if resp.Error != nil || !resp.Result.Value().Equal(types.BoolValue(true)) {
 		t.Fatalf("expected true without errors, got %+v", resp)
 	}
@@ -151,7 +151,7 @@ func TestCaptureSkipsIncompleteInputsAndReturnsTrue(t *testing.T) {
 
 func TestFunctionOptsIntoNullAndUnknownArguments(t *testing.T) {
 	var response function.DefinitionResponse
-	NewCapturePostHogFunction().Definition(context.Background(), function.DefinitionRequest{}, &response)
+	NewCapturePostHogFunction("dev").Definition(context.Background(), function.DefinitionRequest{}, &response)
 	if len(response.Definition.Parameters) != 3 || response.Definition.VariadicParameter != nil {
 		t.Fatal("capture_posthog must accept exactly three arguments")
 	}
