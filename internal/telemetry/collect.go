@@ -111,6 +111,10 @@ func (c Collector) git(ctx context.Context) map[string]any {
 		if key == "remote" {
 			value = sanitizeRemote(value)
 		}
+		// `--abbrev-ref` prints HEAD for a detached HEAD, which has no current branch.
+		if key == "branch" && value == "HEAD" {
+			continue
+		}
 		if value != "" {
 			result[key] = value
 		}
@@ -127,15 +131,20 @@ func sanitizeRemote(remote string) string {
 		u.User, u.RawQuery, u.Fragment = nil, "", ""
 		return u.String()
 	}
-	// SCP-style SSH remotes, e.g. git@github.com:owner/repository.git.
-	if at := strings.IndexByte(remote, '@'); at >= 0 {
-		remote = remote[at+1:]
-	}
-	if strings.Contains(remote, ":") && !strings.ContainsAny(remote, "?#") {
-		return remote
-	}
+	// SCP-style SSH remotes, e.g. git@github.com:owner/repository.git. Like Git, treat a colon
+	// after a slash as part of a local path. A single letter before it is a Windows drive.
 	// Do not transmit local filesystem remotes.
-	return ""
+	host, path, ok := strings.Cut(remote, ":")
+	if !ok || strings.ContainsAny(host, `/\`) || strings.ContainsAny(remote, "?#") {
+		return ""
+	}
+	if at := strings.LastIndexByte(host, '@'); at >= 0 {
+		host = host[at+1:]
+	}
+	if len(host) < 2 {
+		return ""
+	}
+	return host + ":" + path
 }
 
 func (c Collector) github(ctx context.Context) map[string]any {
