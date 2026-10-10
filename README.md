@@ -67,6 +67,7 @@ check "telemetry" {
         git            = true
         github         = false
         github_actions = true
+        hcp_terraform  = true
         terraform      = true
         toolchain      = true
 

@@ -32,7 +32,7 @@ func optionsParameter() function.DynamicParameter {
 	// requires every declared attribute and cannot express these defaults.
 	return function.DynamicParameter{
 		Name: "options", AllowNullValue: true, AllowUnknownValues: true,
-		MarkdownDescription: "Object or map that selects metadata collectors and configures caching and deduplication. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` defaults to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
+		MarkdownDescription: "Object or map that selects metadata collectors and configures caching and deduplication. All attributes are optional: the `machine`, `network`, `git`, `github_actions`, `hcp_terraform`, `terraform`, and `toolchain` collectors default to `true`, `github` defaults to `false`, `cache_enabled` and `deduplication_enabled` default to `true`, and `deduplication_keys` defaults to `[]`. A null value or an unknown attribute, such as a misspelled collector, skips the capture.",
 	}
 }
 
@@ -41,7 +41,7 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 	// identifies a person, so it is the only collector disabled by default.
 	opts := captureOptions{
 		collect: telemetry.Options{
-			Machine: true, Network: true, Git: true, GitHub: false, GitHubActions: true, Terraform: true, Toolchain: true,
+			Machine: true, Network: true, Git: true, GitHub: false, GitHubActions: true, HCPTerraform: true, Terraform: true, Toolchain: true,
 		},
 		cacheEnabled: true, deduplicationEnabled: true,
 	}
@@ -60,7 +60,7 @@ func collectionOptions(options types.Dynamic) (captureOptions, error) {
 	}
 	flags := map[string]*bool{
 		"machine": &opts.collect.Machine, "network": &opts.collect.Network, "git": &opts.collect.Git,
-		"github": &opts.collect.GitHub, "github_actions": &opts.collect.GitHubActions,
+		"github": &opts.collect.GitHub, "github_actions": &opts.collect.GitHubActions, "hcp_terraform": &opts.collect.HCPTerraform,
 		"terraform": &opts.collect.Terraform, "toolchain": &opts.collect.Toolchain,
 		"cache_enabled": &opts.cacheEnabled, "deduplication_enabled": &opts.deduplicationEnabled,
 	}
