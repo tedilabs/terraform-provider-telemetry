@@ -2,7 +2,7 @@ module github.com/tedilabs/terraform-provider-telemetry
 
 go 1.26.0
 
-toolchain go1.27.2
+toolchain go1.27.4
 
 require (
 	github.com/hashicorp/terraform-json v0.29.0
